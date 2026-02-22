@@ -19,7 +19,9 @@ export default function OrganizerEventDetail() {
   // Attendance/Scanner state
   const [manualTicket, setManualTicket] = useState('');
   const [scanResult, setScanResult] = useState('');
-  const [attendanceList, setAttendanceList] = useState([]);
+  const [checkedInList, setCheckedInList] = useState([]);
+  const [notCheckedInList, setNotCheckedInList] = useState([]);
+  const [attendanceStats, setAttendanceStats] = useState({ total: 0, checkedIn: 0, notCheckedIn: 0 });
   const [scanning, setScanning] = useState(false);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -35,7 +37,11 @@ export default function OrganizerEventDetail() {
     }).catch(() => {});
   };
   const fetchAttendance = () => {
-    API.get(`/events/attendance/${id}`).then(r => setAttendanceList(r.data.attendees || [])).catch(() => {});
+    API.get(`/events/attendance/${id}`).then(r => {
+      setCheckedInList(r.data.checkedInList || []);
+      setNotCheckedInList(r.data.notCheckedInList || []);
+      setAttendanceStats({ total: r.data.total || 0, checkedIn: r.data.checkedIn || 0, notCheckedIn: r.data.notCheckedIn || 0 });
+    }).catch(() => {});
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchEvent(); fetchAttendance(); }, [id]);
@@ -118,8 +124,9 @@ export default function OrganizerEventDetail() {
     try {
       const parsed = JSON.parse(data);
       const res = await API.post(`/events/scan/${id}`, { ticketId: parsed.ticketId });
-      setScanResult(`✅ ${res.data.msg} - ${res.data.participant}`);
+      setScanResult(`✅ ${res.data.msg} — ${res.data.participantName || res.data.participant?.name || 'Unknown'}`);
       fetchAttendance();
+      fetchEvent();
     } catch (err) {
       if (typeof err === 'object' && err.response) {
         setScanResult(`❌ ${err.response?.data?.msg || 'Scan failed'}`);
@@ -136,6 +143,7 @@ export default function OrganizerEventDetail() {
       setScanResult(`✅ ${res.data.msg}`);
       setManualTicket('');
       fetchAttendance();
+      fetchEvent();
     } catch (err) { setScanResult(`❌ ${err.response?.data?.msg || 'Failed'}`); }
   };
 
@@ -207,8 +215,6 @@ export default function OrganizerEventDetail() {
     const map = { draft: '#888', published: '#2196F3', ongoing: '#FF9800', completed: '#4CAF50', closed: '#999', cancelled: '#f44336' };
     return map[s] || '#333';
   };
-
-  const attendedCount = (event.registrations || []).filter(r => r.attendanceChecked).length;
 
   return (
     <div>
@@ -285,10 +291,14 @@ export default function OrganizerEventDetail() {
                 <div style={{ fontSize: 22, fontWeight: 700 }}>{confirmed.reduce((s, r) => s + (r.quantity || 1), 0)}</div>
                 <div style={{ fontSize: 12 }}>Items Sold</div>
               </div>
+              <div style={{ padding: 12, background: '#ffecb3', borderRadius: 8, minWidth: 120, textAlign: 'center' }}>
+                <div style={{ fontSize: 22, fontWeight: 700 }}>{event.stockQuantity}</div>
+                <div style={{ fontSize: 12 }}>Stock Left</div>
+              </div>
             </>
           )}
           <div style={{ padding: 12, background: '#f3e5f5', borderRadius: 8, minWidth: 120, textAlign: 'center' }}>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{attendedCount}/{confirmed.length}</div>
+            <div style={{ fontSize: 22, fontWeight: 700 }}>{attendanceStats.checkedIn}/{confirmed.length}</div>
             <div style={{ fontSize: 12 }}>Attendance</div>
           </div>
           <div style={{ padding: 12, background: '#e0f2f1', borderRadius: 8, minWidth: 120, textAlign: 'center' }}>
@@ -361,16 +371,19 @@ export default function OrganizerEventDetail() {
         {/* ─── TAB: PENDING ORDERS ──────────────────────────────── */}
         {tab === 'pending' && (
           <div style={{ marginTop: 16 }}>
-            <h3>Pending Orders ({pendingOrders.length})</h3>
+            <h3>Payment Approval ({pendingOrders.length} Pending)</h3>
+
+            {/* Show pending orders first */}
             {pendingOrders.length === 0 && <p style={{ color: '#888' }}>No pending orders.</p>}
             {pendingOrders.map(r => {
               const p = r.participant;
               return (
-                <div key={r.ticketId} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginBottom: 12 }}>
+                <div key={r.ticketId} style={{ border: '1px solid #FF9800', borderRadius: 8, padding: 12, marginBottom: 12, background: '#fff8e1' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
                       <strong>{p ? `${p.firstName || ''} ${p.lastName || ''}` : 'N/A'}</strong>
                       <span style={{ fontSize: 12, color: '#888', marginLeft: 8 }}>{p?.email}</span>
+                      <span style={{ fontSize: 11, background: '#FF9800', color: '#fff', padding: '1px 6px', borderRadius: 3, marginLeft: 8 }}>Pending</span>
                       <div style={{ fontSize: 13, marginTop: 4 }}>
                         Size: {r.size || '-'} | Color: {r.color || '-'} | Qty: {r.quantity || 1} | Total: ₹{(r.quantity || 1) * (event.price || 0)}
                       </div>
@@ -393,6 +406,68 @@ export default function OrganizerEventDetail() {
                 </div>
               );
             })}
+
+            {/* Show rejected orders */}
+            {(() => {
+              const rejectedOrders = (event.registrations || []).filter(r => r.status === 'rejected');
+              if (rejectedOrders.length === 0) return null;
+              return (
+                <>
+                  <h4 style={{ marginTop: 20 }}>Rejected Orders ({rejectedOrders.length})</h4>
+                  {rejectedOrders.map(r => {
+                    const p = r.participant;
+                    return (
+                      <div key={r.ticketId} style={{ border: '1px solid #f44336', borderRadius: 8, padding: 12, marginBottom: 12, background: '#fff5f5', opacity: 0.8 }}>
+                        <div>
+                          <strong>{p ? `${p.firstName || ''} ${p.lastName || ''}` : 'N/A'}</strong>
+                          <span style={{ fontSize: 12, color: '#888', marginLeft: 8 }}>{p?.email}</span>
+                          <span style={{ fontSize: 11, background: '#f44336', color: '#fff', padding: '1px 6px', borderRadius: 3, marginLeft: 8 }}>Rejected</span>
+                          <div style={{ fontSize: 13, marginTop: 4 }}>
+                            Size: {r.size || '-'} | Color: {r.color || '-'} | Qty: {r.quantity || 1}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>Ticket: {r.ticketId?.slice(0, 12)}... | {new Date(r.registeredAt).toLocaleString()}</div>
+                        </div>
+                        {r.paymentProof && (
+                          <div style={{ marginTop: 8 }}>
+                            <strong style={{ fontSize: 12 }}>Payment Proof:</strong>
+                            <div style={{ marginTop: 4 }}>
+                              <img src={r.paymentProof} alt="Payment proof" style={{ maxWidth: 200, maxHeight: 150, border: '1px solid #ddd', borderRadius: 4 }} />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </>
+              );
+            })()}
+
+            {/* Show approved/confirmed orders */}
+            {(() => {
+              const approvedOrders = (event.registrations || []).filter(r => r.status === 'confirmed');
+              if (approvedOrders.length === 0) return null;
+              return (
+                <>
+                  <h4 style={{ marginTop: 20 }}>Approved Orders ({approvedOrders.length})</h4>
+                  {approvedOrders.map(r => {
+                    const p = r.participant;
+                    return (
+                      <div key={r.ticketId} style={{ border: '1px solid #4CAF50', borderRadius: 8, padding: 12, marginBottom: 12, background: '#f0fff0' }}>
+                        <div>
+                          <strong>{p ? `${p.firstName || ''} ${p.lastName || ''}` : 'N/A'}</strong>
+                          <span style={{ fontSize: 12, color: '#888', marginLeft: 8 }}>{p?.email}</span>
+                          <span style={{ fontSize: 11, background: '#4CAF50', color: '#fff', padding: '1px 6px', borderRadius: 3, marginLeft: 8 }}>Approved</span>
+                          <div style={{ fontSize: 13, marginTop: 4 }}>
+                            Size: {r.size || '-'} | Color: {r.color || '-'} | Qty: {r.quantity || 1} | Total: ₹{(r.quantity || 1) * (event.price || 0)}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>Ticket: {r.ticketId?.slice(0, 12)}... | {new Date(r.registeredAt).toLocaleString()}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              );
+            })()}
           </div>
         )}
 
@@ -442,21 +517,26 @@ export default function OrganizerEventDetail() {
             {/* Attendance stats */}
             <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
               <div style={{ padding: 10, background: '#e8f5e9', borderRadius: 6, textAlign: 'center', minWidth: 100 }}>
-                <div style={{ fontSize: 20, fontWeight: 700 }}>{attendedCount}</div>
+                <div style={{ fontSize: 20, fontWeight: 700 }}>{attendanceStats.checkedIn}</div>
                 <div style={{ fontSize: 11 }}>Checked In</div>
               </div>
               <div style={{ padding: 10, background: '#e3f2fd', borderRadius: 6, textAlign: 'center', minWidth: 100 }}>
-                <div style={{ fontSize: 20, fontWeight: 700 }}>{confirmed.length}</div>
+                <div style={{ fontSize: 20, fontWeight: 700 }}>{attendanceStats.total}</div>
                 <div style={{ fontSize: 11 }}>Registered</div>
               </div>
               <div style={{ padding: 10, background: '#fff3e0', borderRadius: 6, textAlign: 'center', minWidth: 100 }}>
-                <div style={{ fontSize: 20, fontWeight: 700 }}>{confirmed.length > 0 ? Math.round(attendedCount / confirmed.length * 100) : 0}%</div>
+                <div style={{ fontSize: 20, fontWeight: 700 }}>{attendanceStats.total > 0 ? Math.round(attendanceStats.checkedIn / attendanceStats.total * 100) : 0}%</div>
                 <div style={{ fontSize: 11 }}>Rate</div>
+              </div>
+              <div style={{ padding: 10, background: '#ffebee', borderRadius: 6, textAlign: 'center', minWidth: 100 }}>
+                <div style={{ fontSize: 20, fontWeight: 700 }}>{attendanceStats.notCheckedIn}</div>
+                <div style={{ fontSize: 11 }}>Not Scanned</div>
               </div>
               <button onClick={handleAttendanceExport} style={{ padding: '6px 14px', cursor: 'pointer', fontSize: 12, alignSelf: 'center' }}>Export Attendance CSV</button>
             </div>
 
-            {/* Attendance list */}
+            {/* Checked-in list */}
+            <h4 style={{ margin: '16px 0 8px' }}>Checked In ({checkedInList.length})</h4>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ textAlign: 'left', borderBottom: '2px solid #ddd' }}>
@@ -468,8 +548,8 @@ export default function OrganizerEventDetail() {
                 </tr>
               </thead>
               <tbody>
-                {attendanceList.map((a, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
+                {checkedInList.map((a, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid #eee', background: '#f0fff0' }}>
                     <td style={{ padding: 6 }}>{a.name || 'N/A'}</td>
                     <td style={{ padding: 6 }}>{a.email || ''}</td>
                     <td style={{ padding: 6, fontSize: 11 }}>{a.ticketId?.slice(0, 8)}...</td>
@@ -477,8 +557,43 @@ export default function OrganizerEventDetail() {
                     <td style={{ padding: 6, fontSize: 11 }}>{a.note || '-'}</td>
                   </tr>
                 ))}
-                {attendanceList.length === 0 && (
-                  <tr><td colSpan={5} style={{ padding: 12, textAlign: 'center', color: '#888' }}>No attendance records yet</td></tr>
+                {checkedInList.length === 0 && (
+                  <tr><td colSpan={5} style={{ padding: 12, textAlign: 'center', color: '#888' }}>No one checked in yet</td></tr>
+                )}
+              </tbody>
+            </table>
+
+            {/* Not-yet-scanned list */}
+            <h4 style={{ margin: '20px 0 8px' }}>Not Yet Scanned ({notCheckedInList.length})</h4>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ textAlign: 'left', borderBottom: '2px solid #ddd' }}>
+                  <th style={{ padding: 6 }}>Name</th>
+                  <th style={{ padding: 6 }}>Email</th>
+                  <th style={{ padding: 6 }}>Ticket ID</th>
+                  <th style={{ padding: 6 }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {notCheckedInList.map((a, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: 6 }}>{a.name || 'N/A'}</td>
+                    <td style={{ padding: 6 }}>{a.email || ''}</td>
+                    <td style={{ padding: 6, fontSize: 11 }}>{a.ticketId?.slice(0, 8)}...</td>
+                    <td style={{ padding: 6 }}>
+                      <button onClick={async () => {
+                        try {
+                          const res = await API.post(`/events/manual-checkin/${id}/${a.ticketId}`, { note: 'Manual check-in from dashboard' });
+                          setScanResult(`✅ ${res.data.msg}`);
+                          fetchAttendance();
+                          fetchEvent();
+                        } catch (err) { setScanResult(`❌ ${err.response?.data?.msg || 'Failed'}`); }
+                      }} style={{ padding: '3px 10px', cursor: 'pointer', fontSize: 11, background: '#4CAF50', color: '#fff', border: 'none', borderRadius: 3 }}>Check In</button>
+                    </td>
+                  </tr>
+                ))}
+                {notCheckedInList.length === 0 && (
+                  <tr><td colSpan={4} style={{ padding: 12, textAlign: 'center', color: '#888' }}>All participants checked in!</td></tr>
                 )}
               </tbody>
             </table>

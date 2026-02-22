@@ -4,7 +4,7 @@ const User = require('../models/User');
 const { auth, authorize } = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
-const { sendTicketEmail } = require('../utils/email');
+const { sendTicketEmail, buildTicketEmailHtml } = require('../utils/email');
 
 // Helper: send discord webhook when event is published
 async function sendDiscordNotification(organizer, event) {
@@ -137,8 +137,12 @@ router.get('/my/ticket/:ticketId', auth, async (req, res) => {
 
     const participant = await User.findById(reg.participant).select('firstName lastName email');
 
-    const qrData = JSON.stringify({ ticketId: reg.ticketId, eventId: event._id, participantId: reg.participant });
-    const qrDataUrl = await QRCode.toDataURL(qrData);
+    // Only generate QR for confirmed tickets (not pending/rejected)
+    let qrDataUrl = null;
+    if (reg.status === 'confirmed') {
+      const qrData = JSON.stringify({ ticketId: reg.ticketId, eventId: event._id, participantId: reg.participant });
+      qrDataUrl = await QRCode.toDataURL(qrData);
+    }
 
     res.json({
       ticket: {
@@ -285,24 +289,38 @@ router.put('/approve/:eventId/:ticketId', auth, authorize('organizer'), async (r
 
     // Approve: set confirmed, decrement stock, generate QR, send email
     reg.status = 'confirmed';
-    if (event.stockQuantity > 0) event.stockQuantity -= (reg.quantity || 1);
+    const qty = reg.quantity || 1;
+    if (event.stockQuantity > 0) {
+      if (event.stockQuantity < qty) {
+        return res.status(400).json({ msg: 'Not enough stock to fulfill this order' });
+      }
+      event.stockQuantity -= qty;
+    }
     await event.save();
 
     const participant = await User.findById(reg.participant).select('firstName lastName email');
     const qrData = JSON.stringify({ ticketId: reg.ticketId, eventId: event._id, participantId: reg.participant });
     const qrDataUrl = await QRCode.toDataURL(qrData);
 
-    const emailHtml = `
-      <h2>Payment Approved — Purchase Confirmed!</h2>
-      <p><strong>Item:</strong> ${event.title}</p>
-      <p><strong>Ticket ID:</strong> ${reg.ticketId}</p>
-      <p><strong>Size:</strong> ${reg.size || 'N/A'} | <strong>Color:</strong> ${reg.color || 'N/A'}</p>
-      <p><strong>Quantity:</strong> ${reg.quantity || 1}</p>
-      <img src="${qrDataUrl}" alt="QR Code" />
-    `;
-    sendTicketEmail(participant.email, `Approved: ${event.title}`, emailHtml);
+    const extras = [];
+    if (reg.size) extras.push({ label: 'Size', value: reg.size });
+    if (reg.color) extras.push({ label: 'Color', value: reg.color });
+    if (reg.variant) extras.push({ label: 'Variant', value: reg.variant });
+    extras.push({ label: 'Quantity', value: String(qty) });
+    extras.push({ label: 'Total', value: `₹${qty * (event.price || 0)}` });
 
-    res.json({ msg: 'Payment approved', ticketId: reg.ticketId });
+    const emailHtml = buildTicketEmailHtml({
+      eventTitle: event.title,
+      ticketId: reg.ticketId,
+      eventDate: event.startDate ? new Date(event.startDate).toLocaleDateString() : 'TBA',
+      venue: event.venue || 'TBA',
+      participantName: `${participant.firstName} ${participant.lastName}`,
+      qrDataUrl,
+      extras,
+    });
+    sendTicketEmail(participant.email, `Payment Approved: ${event.title}`, emailHtml, qrDataUrl);
+
+    res.json({ msg: 'Payment approved', ticketId: reg.ticketId, qrDataUrl });
   } catch (err) {
     console.error(err);
     res.status(500).json({ msg: 'Server error' });
@@ -321,7 +339,26 @@ router.put('/reject/:eventId/:ticketId', auth, authorize('organizer'), async (re
     if (reg.status !== 'pending_approval') return res.status(400).json({ msg: 'Not in pending state' });
 
     reg.status = 'rejected';
+    // Restore stock reservation if needed
     await event.save();
+
+    // Send rejection notification email
+    const rejectedParticipant = await User.findById(reg.participant).select('firstName lastName email');
+    if (rejectedParticipant) {
+      const rejectHtml = `
+        <div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;border:2px solid #f44336;border-radius:12px;overflow:hidden;">
+          <div style="background:#f44336;color:#fff;padding:16px 20px;text-align:center;">
+            <h2 style="margin:0;">Payment Rejected</h2>
+          </div>
+          <div style="padding:20px;">
+            <p>Hi ${rejectedParticipant.firstName},</p>
+            <p>Your payment for <strong>${event.title}</strong> has been rejected by the organizer.</p>
+            <p><strong>Ticket ID:</strong> ${reg.ticketId}</p>
+            <p>Please contact the organizer if you believe this is an error, or submit a new order with valid payment proof.</p>
+          </div>
+        </div>`;
+      sendTicketEmail(rejectedParticipant.email, `Payment Rejected: ${event.title}`, rejectHtml);
+    }
 
     res.json({ msg: 'Payment rejected' });
   } catch (err) {
@@ -358,9 +395,11 @@ router.post('/scan/:id', auth, authorize('organizer'), async (req, res) => {
     await event.save();
 
     const p = reg.participant;
+    const participantName = p ? `${p.firstName} ${p.lastName}` : 'Unknown';
     res.json({
       msg: 'Attendance marked',
-      participant: { name: p ? `${p.firstName} ${p.lastName}` : 'Unknown', email: p?.email || '' },
+      participant: { name: participantName, email: p?.email || '' },
+      participantName,
       ticketId: reg.ticketId,
     });
   } catch (err) {
@@ -568,9 +607,14 @@ router.post('/:id/register', auth, authorize('participant'), async (req, res) =>
 
     // Check already registered
     const alreadyRegistered = event.registrations.find(
-      r => r.participant.toString() === req.user.id && r.status === 'confirmed'
+      r => r.participant.toString() === req.user.id && (r.status === 'confirmed' || r.status === 'pending_approval')
     );
-    if (alreadyRegistered) return res.status(400).json({ msg: 'Already registered' });
+    if (alreadyRegistered) {
+      const msg = alreadyRegistered.status === 'pending_approval'
+        ? 'You already have a pending order for this event'
+        : 'Already registered';
+      return res.status(400).json({ msg });
+    }
 
     // For normal events
     if (event.eventType === 'normal') {
@@ -589,20 +633,20 @@ router.post('/:id/register', auth, authorize('participant'), async (req, res) =>
       });
       await event.save();
 
-      // Generate QR
+      // Generate QR code
       const qrData = JSON.stringify({ ticketId, eventId: event._id, participantId: req.user.id });
       const qrDataUrl = await QRCode.toDataURL(qrData);
 
-      // Send email
-      const emailHtml = `
-        <h2>Registration Confirmed!</h2>
-        <p><strong>Event:</strong> ${event.title}</p>
-        <p><strong>Ticket ID:</strong> ${ticketId}</p>
-        <p><strong>Date:</strong> ${event.startDate ? new Date(event.startDate).toLocaleDateString() : 'TBA'}</p>
-        <p><strong>Venue:</strong> ${event.venue || 'TBA'}</p>
-        <img src="${qrDataUrl}" alt="QR Code" />
-      `;
-      sendTicketEmail(participant.email, `Ticket: ${event.title}`, emailHtml);
+      // Send confirmation email with QR as inline attachment
+      const emailHtml = buildTicketEmailHtml({
+        eventTitle: event.title,
+        ticketId,
+        eventDate: event.startDate ? new Date(event.startDate).toLocaleDateString() : 'TBA',
+        venue: event.venue || 'TBA',
+        participantName: `${participant.firstName} ${participant.lastName}`,
+        qrDataUrl,
+      });
+      sendTicketEmail(participant.email, `Registration Confirmed: ${event.title}`, emailHtml, qrDataUrl);
 
       return res.status(201).json({
         msg: 'Registered successfully',
@@ -616,9 +660,12 @@ router.post('/:id/register', auth, authorize('participant'), async (req, res) =>
       const { size, color, variant, quantity, paymentProof } = req.body;
       const qty = quantity || 1;
 
-      // Check stock (don't decrement yet — only on approval)
-      if (event.stockQuantity > 0 && qty > event.stockQuantity) {
-        return res.status(400).json({ msg: 'Not enough stock available' });
+      // Check stock — block out-of-stock purchases
+      if (event.stockQuantity <= 0) {
+        return res.status(400).json({ msg: 'This item is out of stock' });
+      }
+      if (qty > event.stockQuantity) {
+        return res.status(400).json({ msg: `Not enough stock. Only ${event.stockQuantity} left.` });
       }
 
       // Check per-user purchase limit

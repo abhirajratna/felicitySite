@@ -92,6 +92,8 @@ export default function MyEventsDashboard() {
             <tbody>
               {currentList.map(e => {
                 const reg = e.myRegistrations?.[0];
+                const statusColor = reg?.status === 'confirmed' ? 'green' : reg?.status === 'pending_approval' ? '#FF9800' : reg?.status === 'rejected' ? 'red' : '#888';
+                const statusLabel = reg?.status === 'pending_approval' ? 'Pending Approval' : reg?.status || e.status;
                 return (
                   <tr key={e._id} style={{ borderBottom: '1px solid #eee' }}>
                     <td style={{ padding: 6 }}>
@@ -99,11 +101,11 @@ export default function MyEventsDashboard() {
                     </td>
                     <td style={{ padding: 6 }}>{e.eventType}</td>
                     <td style={{ padding: 6 }}>{e.organizer?.organizerName || '-'}</td>
-                    <td style={{ padding: 6 }}>{reg?.status || e.status}</td>
+                    <td style={{ padding: 6, color: statusColor }}>{statusLabel}</td>
                     <td style={{ padding: 6 }}>
                       {reg?.ticketId ? (
                         <Link to={`/ticket/${reg.ticketId}`} style={{ fontSize: 12 }}>
-                          {reg.ticketId.slice(0, 8)}...
+                          View Ticket
                         </Link>
                       ) : '-'}
                     </td>

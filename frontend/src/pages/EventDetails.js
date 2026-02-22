@@ -15,6 +15,7 @@ export default function EventDetails() {
   const [formAnswers, setFormAnswers] = useState({});
   const [merchOpts, setMerchOpts] = useState({ size: '', color: '', variant: '', quantity: 1 });
   const [paymentProof, setPaymentProof] = useState('');
+  const [registrationResult, setRegistrationResult] = useState(null); // { ticketId, qrDataUrl, status }
 
   // Discussion state
   const [messages, setMessages] = useState([]);
@@ -79,7 +80,7 @@ export default function EventDetails() {
   const canRegister = user?.role === 'participant' && !deadlinePassed && !limitReached && !outOfStock && !alreadyRegistered;
 
   const handleRegister = async () => {
-    setRegMsg(''); setRegError('');
+    setRegMsg(''); setRegError(''); setRegistrationResult(null);
     try {
       let body;
       if (event.eventType === 'normal') {
@@ -89,7 +90,12 @@ export default function EventDetails() {
         body = { ...merchOpts, paymentProof };
       }
       const res = await API.post(`/events/${id}/register`, body);
-      setRegMsg(res.data.msg + (res.data.ticketId ? ` — Ticket: ${res.data.ticketId}` : ''));
+      setRegMsg(res.data.msg);
+      setRegistrationResult({
+        ticketId: res.data.ticketId,
+        qrDataUrl: res.data.qrDataUrl || null,
+        status: res.data.status || 'confirmed',
+      });
       const updated = await API.get(`/events/${id}`);
       setEvent(updated.data.event);
     } catch (err) {
@@ -219,6 +225,38 @@ export default function EventDetails() {
 
             {regMsg && <p style={{ color: 'green' }}>{regMsg}</p>}
             {regError && <p style={{ color: 'red' }}>{regError}</p>}
+
+            {/* Registration Success with QR Code */}
+            {registrationResult && (
+              <div style={{ padding: 16, border: '2px solid #4CAF50', borderRadius: 8, marginBottom: 16, background: '#f0fff0', textAlign: 'center' }}>
+                <h3 style={{ color: '#4CAF50', margin: '0 0 12px' }}>
+                  {registrationResult.status === 'pending_approval' ? '⏳ Order Placed — Pending Approval' : '✅ Registration Confirmed!'}
+                </h3>
+                <p style={{ margin: '4px 0', fontFamily: 'monospace', fontSize: 13 }}>
+                  <strong>Ticket ID:</strong> {registrationResult.ticketId}
+                </p>
+                {registrationResult.qrDataUrl && (
+                  <div style={{ margin: '12px 0' }}>
+                    <img src={registrationResult.qrDataUrl} alt="QR Code" style={{ width: 180, height: 180 }} />
+                    <p style={{ fontSize: 12, color: '#666', margin: '8px 0 0' }}>Present this QR code at the venue</p>
+                  </div>
+                )}
+                {registrationResult.status === 'pending_approval' && (
+                  <p style={{ fontSize: 13, color: '#FF9800', margin: '8px 0 0' }}>
+                    QR code will be generated once your payment is approved by the organizer.
+                  </p>
+                )}
+                {registrationResult.status === 'confirmed' && (
+                  <p style={{ fontSize: 12, color: '#666', margin: '8px 0 0' }}>
+                    📧 A confirmation email with your ticket has been sent to your email address.
+                  </p>
+                )}
+                <button onClick={() => navigate(`/ticket/${registrationResult.ticketId}`)}
+                  style={{ marginTop: 12, padding: '8px 20px', cursor: 'pointer', background: '#2196F3', color: '#fff', border: 'none', borderRadius: 4 }}>
+                  View Full Ticket
+                </button>
+              </div>
+            )}
 
             {deadlinePassed && <p style={{ color: 'red' }}>Registration deadline has passed.</p>}
             {limitReached && <p style={{ color: 'red' }}>Registration limit reached.</p>}
