@@ -1,35 +1,8 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
-let transporter = null;
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-async function getTransporter() {
-  if (transporter) return transporter;
-
-  // Use real SMTP if configured, otherwise fall back to Ethereal
-  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-    transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-    console.log('Using configured SMTP:', process.env.SMTP_HOST);
-  } else {
-    // Fallback to Ethereal test account
-    const testAccount = await nodemailer.createTestAccount();
-    transporter = nodemailer.createTransport({
-      host: 'smtp.ethereal.email',
-      port: 587,
-      secure: false,
-      auth: { user: testAccount.user, pass: testAccount.pass },
-    });
-    console.log('Using Ethereal test email (emails not delivered to real inboxes)');
-  }
-  return transporter;
-}
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'Club Council <noreply@clubcouncil.com>';
 
 function buildTicketEmailHtml({ eventTitle, ticketId, eventDate, venue, participantName, qrDataUrl, extras }) {
   const extraRows = extras ? extras.map(e => `<tr><td style="padding:6px 12px;font-weight:600;color:#555;">${e.label}</td><td style="padding:6px 12px;">${e.value}</td></tr>`).join('') : '';
@@ -40,7 +13,7 @@ function buildTicketEmailHtml({ eventTitle, ticketId, eventDate, venue, particip
       </div>
       <div style="padding:20px;">
         <div style="text-align:center;margin-bottom:16px;">
-          ${qrDataUrl ? `<img src="cid:qrcode" alt="QR Code" style="width:180px;height:180px;" />` : ''}
+          ${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR Code" style="width:180px;height:180px;" />` : ''}
         </div>
         <table style="width:100%;border-collapse:collapse;">
           <tr><td style="padding:6px 12px;font-weight:600;color:#555;">Event</td><td style="padding:6px 12px;">${eventTitle}</td></tr>
@@ -60,33 +33,29 @@ function buildTicketEmailHtml({ eventTitle, ticketId, eventDate, venue, particip
 
 async function sendTicketEmail(toEmail, subject, htmlBody, qrDataUrl) {
   try {
-    const t = await getTransporter();
-    const mailOptions = {
-      from: `"${process.env.SMTP_FROM_NAME || 'Club Council'}" <${process.env.SMTP_FROM_EMAIL || 'noreply@clubcouncil.com'}>`,
+    const emailOptions = {
+      from: FROM_EMAIL,
       to: toEmail,
       subject,
       html: htmlBody,
     };
 
-    // Attach QR code as inline image if provided
+    // Attach QR code as an attachment if provided
     if (qrDataUrl) {
       const base64Data = qrDataUrl.replace(/^data:image\/png;base64,/, '');
-      mailOptions.attachments = [{
+      emailOptions.attachments = [{
         filename: 'qrcode.png',
-        content: base64Data,
-        encoding: 'base64',
-        cid: 'qrcode',
+        content: Buffer.from(base64Data, 'base64'),
       }];
     }
 
-    const info = await t.sendMail(mailOptions);
-    const previewUrl = nodemailer.getTestMessageUrl(info);
-    if (previewUrl) {
-      console.log('Email preview URL:', previewUrl);
-    } else {
-      console.log('Email sent to:', toEmail, '| MessageId:', info.messageId);
+    const { data, error } = await resend.emails.send(emailOptions);
+    if (error) {
+      console.error('Resend email error:', error);
+      return null;
     }
-    return info;
+    console.log('Email sent to:', toEmail, '| Id:', data.id);
+    return data;
   } catch (err) {
     console.error('Email send error:', err);
   }
