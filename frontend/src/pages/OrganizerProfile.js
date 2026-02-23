@@ -8,7 +8,6 @@ export default function OrganizerProfile() {
   const [form, setForm] = useState({
     organizerName: '', category: '', description: '', contactEmail: '', contactNumber: '', discordWebhook: '',
   });
-  const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '' });
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
 
@@ -45,17 +44,6 @@ export default function OrganizerProfile() {
     }
   };
 
-  const handlePasswordChange = async (e) => {
-    e.preventDefault();
-    setMsg(''); setError('');
-    try {
-      await API.put('/user/change-password', pwForm);
-      setMsg('Password changed');
-      setPwForm({ currentPassword: '', newPassword: '' });
-    } catch (err) {
-      setError(err.response?.data?.msg || 'Failed');
-    }
-  };
 
   const handleResetRequest = async () => {
     setResetMsg('');
@@ -112,17 +100,6 @@ export default function OrganizerProfile() {
           <button type="submit" style={{ padding: '8px 20px', cursor: 'pointer', marginTop: 8 }}>Save Profile</button>
         </form>
 
-        <hr style={{ margin: '24px 0' }} />
-        <h3>Change Password</h3>
-        <form onSubmit={handlePasswordChange}>
-          <label style={labelStyle}>Current Password</label>
-          <input type="password" value={pwForm.currentPassword} onChange={e => setPwForm({ ...pwForm, currentPassword: e.target.value })} required style={inputStyle} />
-          <label style={labelStyle}>New Password</label>
-          <input type="password" value={pwForm.newPassword} onChange={e => setPwForm({ ...pwForm, newPassword: e.target.value })} required style={inputStyle} />
-          <button type="submit" style={{ padding: '8px 20px', cursor: 'pointer' }}>Change Password</button>
-        </form>
-
-        {/* Password Reset Request */}
         <hr style={{ margin: '24px 0' }} />
         <h3>Request Password Reset (via Admin)</h3>
         <p style={{ fontSize: 13, color: '#666' }}>Forgot your password? Submit a reset request to the admin.</p>

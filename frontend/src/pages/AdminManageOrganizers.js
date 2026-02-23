@@ -5,10 +5,11 @@ import API from '../api';
 export default function AdminManageOrganizers() {
   const [organizers, setOrganizers] = useState([]);
   const [form, setForm] = useState({ organizerName: '', email: '', password: '', category: '', description: '', contactEmail: '' });
-  const [resetForm, setResetForm] = useState({ id: '', newPassword: '' });
+  const [resetForm, setResetForm] = useState({ id: '' });
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
   const [generatedCreds, setGeneratedCreds] = useState(null);
+  const [resetCreds, setResetCreds] = useState(null);
 
   const fetchOrganizers = () => {
     API.get('/admin/organizers').then(r => setOrganizers(r.data.organizers)).catch(() => {});
@@ -54,11 +55,14 @@ export default function AdminManageOrganizers() {
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
-    setMsg(''); setError('');
+    setMsg(''); setError(''); setResetCreds(null);
     try {
-      await API.put(`/admin/reset-password/${resetForm.id}`, { newPassword: resetForm.newPassword });
+      const res = await API.put(`/admin/reset-password/${resetForm.id}`);
       setMsg('Password reset successful');
-      setResetForm({ id: '', newPassword: '' });
+      if (res.data.credentials) {
+        setResetCreds(res.data.credentials);
+      }
+      setResetForm({ id: '' });
     } catch (err) {
       setError(err.response?.data?.msg || 'Failed');
     }
@@ -139,6 +143,17 @@ export default function AdminManageOrganizers() {
         {/* Reset password */}
         <div style={{ marginTop: 20, padding: 16, background: '#f9f9f9', borderRadius: 8 }}>
           <h3 style={{ margin: '0 0 10px' }}>Reset Organizer Password</h3>
+          <p style={{ fontSize: 12, color: '#666', margin: '0 0 10px' }}>A random password will be auto-generated. Share it securely with the organizer.</p>
+
+          {resetCreds && (
+            <div style={{ padding: 12, background: '#e8f5e9', borderRadius: 8, marginBottom: 12, border: '1px solid #4CAF50' }}>
+              <h4 style={{ margin: '0 0 6px' }}>New Credentials:</h4>
+              <p style={{ margin: '2px 0', fontSize: 14 }}><strong>Email:</strong> {resetCreds.email}</p>
+              <p style={{ margin: '2px 0', fontSize: 14 }}><strong>Password:</strong> <code>{resetCreds.password}</code></p>
+              <button onClick={() => setResetCreds(null)} style={{ marginTop: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12 }}>Dismiss</button>
+            </div>
+          )}
+
           <form onSubmit={handleResetPassword} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <select value={resetForm.id} onChange={e => setResetForm({ ...resetForm, id: e.target.value })} required style={{ padding: 6 }}>
               <option value="">Select Organizer</option>
@@ -146,8 +161,7 @@ export default function AdminManageOrganizers() {
                 <option key={org._id} value={org._id}>{org.organizerName || org.name} ({org.email})</option>
               ))}
             </select>
-            <input placeholder="New Password" value={resetForm.newPassword} onChange={e => setResetForm({ ...resetForm, newPassword: e.target.value })} required style={{ padding: 6 }} />
-            <button type="submit" style={{ padding: '6px 16px', cursor: 'pointer' }}>Reset</button>
+            <button type="submit" style={{ padding: '6px 16px', cursor: 'pointer', background: '#FF9800', color: '#fff', border: 'none', borderRadius: 4 }}>Generate New Password</button>
           </form>
         </div>
       </div>

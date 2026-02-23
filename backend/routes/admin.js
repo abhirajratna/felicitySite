@@ -84,16 +84,20 @@ router.get('/organizers', async (req, res) => {
   }
 });
 
-// PUT /api/admin/reset-password/:id  — admin resets organizer password
+// PUT /api/admin/reset-password/:id  — admin resets organizer password (auto-generated)
 router.put('/reset-password/:id', async (req, res) => {
   try {
-    const { newPassword } = req.body;
-    if (!newPassword) return res.status(400).json({ msg: 'New password required' });
     const user = await User.findById(req.params.id);
     if (!user || user.role !== 'organizer') return res.status(404).json({ msg: 'Organizer not found' });
+
+    const newPassword = crypto.randomBytes(8).toString('hex');
     user.password = await bcrypt.hash(newPassword, 10);
     await user.save();
-    res.json({ msg: 'Password reset successful' });
+
+    res.json({
+      msg: 'Password reset successful',
+      credentials: { email: user.email, password: newPassword },
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ msg: 'Server error' });

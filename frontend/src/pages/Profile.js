@@ -20,7 +20,7 @@ export default function Profile() {
     (user?.followedClubs || []).map(c => (typeof c === 'object' ? c._id : c))
   );
   const [msg, setMsg] = useState('');
-  const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '' });
+  const [pwForm, setPwForm] = useState({ currentPassword: '' });
   const [pwMsg, setPwMsg] = useState('');
 
   useEffect(() => {
@@ -52,9 +52,9 @@ export default function Profile() {
     e.preventDefault();
     setPwMsg('');
     try {
-      const res = await API.put('/user/change-password', pwForm);
+      const res = await API.put('/user/change-password', { currentPassword: pwForm.currentPassword });
       setPwMsg(res.data.msg);
-      setPwForm({ currentPassword: '', newPassword: '' });
+      setPwForm({ currentPassword: '' });
     } catch (err) {
       setPwMsg(err.response?.data?.msg || 'Failed');
     }
@@ -121,18 +121,15 @@ export default function Profile() {
         </button>
 
         <hr style={{ margin: '24px 0' }} />
-        <h3>Change Password</h3>
-        {pwMsg && <p style={{ color: pwMsg.includes('success') ? 'green' : 'red' }}>{pwMsg}</p>}
+        <h3>Reset Password</h3>
+        <p style={{ fontSize: 13, color: '#666', marginBottom: 8 }}>A new random password will be generated and sent to your email.</p>
+        {pwMsg && <p style={{ color: pwMsg.includes('success') || pwMsg.includes('sent') ? 'green' : 'red' }}>{pwMsg}</p>}
         <form onSubmit={handleChangePassword}>
           <div style={{ marginBottom: 10 }}>
-            <label>Current Password</label><br />
+            <label>Current Password (to verify identity)</label><br />
             <input type="password" value={pwForm.currentPassword} onChange={e => setPwForm({ ...pwForm, currentPassword: e.target.value })} required style={{ width: '100%', padding: 8 }} />
           </div>
-          <div style={{ marginBottom: 10 }}>
-            <label>New Password</label><br />
-            <input type="password" value={pwForm.newPassword} onChange={e => setPwForm({ ...pwForm, newPassword: e.target.value })} required style={{ width: '100%', padding: 8 }} />
-          </div>
-          <button type="submit" style={{ padding: '8px 24px', cursor: 'pointer' }}>Change Password</button>
+          <button type="submit" style={{ padding: '8px 24px', cursor: 'pointer', background: '#FF9800', color: '#fff', border: 'none', borderRadius: 4 }}>Reset Password & Email Me</button>
         </form>
       </div>
     </>

@@ -1,7 +1,9 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const User = require('../models/User');
 const { auth } = require('../middleware/auth');
+const { sendTicketEmail } = require('../utils/email');
 
 // PUT /api/user/preferences  — update interests & followed clubs
 router.put('/preferences', auth, async (req, res) => {
@@ -99,20 +101,47 @@ router.put('/profile', auth, async (req, res) => {
   }
 });
 
-// PUT /api/user/change-password
+// PUT /api/user/change-password — participant only, auto-generates random password and emails it
 router.put('/change-password', auth, async (req, res) => {
   try {
-    const { currentPassword, newPassword } = req.body;
-    if (!currentPassword || !newPassword) return res.status(400).json({ msg: 'Both passwords required' });
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ msg: 'User not found' });
+
+    // Only participants can reset their own password
+    if (user.role !== 'participant') {
+      return res.status(403).json({ msg: 'Organizers must request a password reset through admin' });
+    }
+
+    const { currentPassword } = req.body;
+    if (!currentPassword) return res.status(400).json({ msg: 'Current password is required' });
 
     const isMatch = await bcrypt.compare(currentPassword, user.password);
     if (!isMatch) return res.status(400).json({ msg: 'Current password is incorrect' });
 
+    // Auto-generate a random password
+    const newPassword = crypto.randomBytes(8).toString('hex');
     user.password = await bcrypt.hash(newPassword, 10);
     await user.save();
-    res.json({ msg: 'Password changed successfully' });
+
+    // Send the new password via email
+    const emailHtml = `
+      <div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;border:2px solid #333;border-radius:12px;overflow:hidden;">
+        <div style="background:#333;color:#fff;padding:16px 20px;text-align:center;">
+          <h2 style="margin:0;">Password Reset</h2>
+        </div>
+        <div style="padding:20px;">
+          <p>Hi ${user.firstName},</p>
+          <p>Your password has been reset successfully. Here is your new password:</p>
+          <div style="padding:12px;background:#f5f5f5;border-radius:6px;text-align:center;margin:16px 0;">
+            <code style="font-size:18px;font-weight:bold;letter-spacing:2px;">${newPassword}</code>
+          </div>
+          <p style="font-size:13px;color:#888;">Please log in with this password. You can reset it again anytime from your profile.</p>
+        </div>
+      </div>
+    `;
+    sendTicketEmail(user.email, 'Your New Password — Club Council', emailHtml);
+
+    res.json({ msg: 'Password reset successfully. New password has been sent to your email.' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ msg: 'Server error' });
