@@ -3,7 +3,7 @@ const Feedback = require('../models/Feedback');
 const Event = require('../models/Event');
 const { auth, authorize } = require('../middleware/auth');
 
-// POST /api/feedback/:eventId — submit anonymous feedback
+// POST /api/feedback/:eventId
 router.post('/:eventId', auth, authorize('participant'), async (req, res) => {
   try {
     const { rating, comment } = req.body;
@@ -14,7 +14,6 @@ router.post('/:eventId', auth, authorize('participant'), async (req, res) => {
     const event = await Event.findById(req.params.eventId);
     if (!event) return res.status(404).json({ msg: 'Event not found' });
 
-    // Check participant was registered
     const wasRegistered = event.registrations.some(
       r => r.participant.toString() === req.user.id && r.status === 'confirmed'
     );
@@ -22,7 +21,6 @@ router.post('/:eventId', auth, authorize('participant'), async (req, res) => {
       return res.status(403).json({ msg: 'Only registered participants can give feedback' });
     }
 
-    // Upsert feedback (one per participant per event)
     const existing = await Feedback.findOne({ event: req.params.eventId, participant: req.user.id });
     if (existing) {
       existing.rating = rating;
@@ -44,7 +42,7 @@ router.post('/:eventId', auth, authorize('participant'), async (req, res) => {
   }
 });
 
-// GET /api/feedback/:eventId — get feedback for event (anonymous: no participant names)
+// GET /api/feedback/:eventId
 router.get('/:eventId', auth, async (req, res) => {
   try {
     const feedbacks = await Feedback.find({ event: req.params.eventId })

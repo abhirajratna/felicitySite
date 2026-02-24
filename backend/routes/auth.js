@@ -3,12 +3,11 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-// Helper: check IIIT email
 function isIIITEmail(email) {
   return email.endsWith('@iiit.ac.in') || email.endsWith('@students.iiit.ac.in') || email.endsWith('@research.iiit.ac.in');
 }
 
-// POST /api/auth/register  — participant only
+// POST /api/auth/register
 router.post('/register', async (req, res) => {
   try {
     const { firstName, lastName, email, password, collegeName, contactNumber } = req.body;
@@ -70,7 +69,6 @@ router.post('/login', async (req, res) => {
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) return res.status(400).json({ msg: 'Invalid credentials' });
 
-    // Check if account is disabled
     if (user.isDisabled) return res.status(403).json({ msg: 'Account has been disabled. Contact admin.' });
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -106,7 +104,7 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// GET /api/auth/me  — get current user from token
+// GET /api/auth/me
 const { auth: authMiddleware } = require('../middleware/auth');
 router.get('/me', authMiddleware, async (req, res) => {
   try {

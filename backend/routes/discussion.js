@@ -3,7 +3,7 @@ const Discussion = require('../models/Discussion');
 const Event = require('../models/Event');
 const { auth } = require('../middleware/auth');
 
-// GET /api/discussions/:eventId — get discussion messages
+// GET /api/discussions/:eventId
 router.get('/:eventId', auth, async (req, res) => {
   try {
     let disc = await Discussion.findOne({ event: req.params.eventId })
@@ -12,7 +12,6 @@ router.get('/:eventId', auth, async (req, res) => {
     if (!disc) {
       disc = { event: req.params.eventId, messages: [] };
     }
-    // Sort: pinned first, then by date desc
     const messages = [...(disc.messages || [])];
     messages.sort((a, b) => {
       if (a.pinned && !b.pinned) return -1;
@@ -26,13 +25,12 @@ router.get('/:eventId', auth, async (req, res) => {
   }
 });
 
-// POST /api/discussions/:eventId — post a message
+// POST /api/discussions/:eventId
 router.post('/:eventId', auth, async (req, res) => {
   try {
     const { text, isAnnouncement } = req.body;
     if (!text || !text.trim()) return res.status(400).json({ msg: 'Message text is required' });
 
-    // Verify user is registered participant or organizer of this event
     const event = await Event.findById(req.params.eventId);
     if (!event) return res.status(404).json({ msg: 'Event not found' });
 
@@ -55,7 +53,6 @@ router.post('/:eventId', auth, async (req, res) => {
     });
     await disc.save();
 
-    // Re-fetch with populated data
     disc = await Discussion.findOne({ event: req.params.eventId })
       .populate('messages.user', 'firstName lastName organizerName role')
       .populate('messages.replies.user', 'firstName lastName organizerName role');
@@ -67,7 +64,7 @@ router.post('/:eventId', auth, async (req, res) => {
   }
 });
 
-// DELETE /api/discussions/:eventId/:messageId — delete message (organizer or own)
+// DELETE /api/discussions/:eventId/:messageId
 router.delete('/:eventId/:messageId', auth, async (req, res) => {
   try {
     const event = await Event.findById(req.params.eventId);
@@ -80,7 +77,6 @@ router.delete('/:eventId/:messageId', auth, async (req, res) => {
     const msgIdx = disc.messages.findIndex(m => m._id.toString() === req.params.messageId);
     if (msgIdx === -1) return res.status(404).json({ msg: 'Message not found' });
 
-    // Only organizer or message author can delete
     if (!isOrganizer && disc.messages[msgIdx].user.toString() !== req.user.id) {
       return res.status(403).json({ msg: 'Not authorized' });
     }
@@ -94,7 +90,7 @@ router.delete('/:eventId/:messageId', auth, async (req, res) => {
   }
 });
 
-// PUT /api/discussions/:eventId/:messageId/pin — toggle pin (organizer only)
+// PUT /api/discussions/:eventId/:messageId/pin
 router.put('/:eventId/:messageId/pin', auth, async (req, res) => {
   try {
     const event = await Event.findById(req.params.eventId);
@@ -118,7 +114,7 @@ router.put('/:eventId/:messageId/pin', auth, async (req, res) => {
   }
 });
 
-// POST /api/discussions/:eventId/:messageId/reply — reply to message
+// POST /api/discussions/:eventId/:messageId/reply
 router.post('/:eventId/:messageId/reply', auth, async (req, res) => {
   try {
     const { text } = req.body;
@@ -144,7 +140,7 @@ router.post('/:eventId/:messageId/reply', auth, async (req, res) => {
   }
 });
 
-// PUT /api/discussions/:eventId/:messageId/react — react to message
+// PUT /api/discussions/:eventId/:messageId/react
 router.put('/:eventId/:messageId/react', auth, async (req, res) => {
   try {
     const { emoji } = req.body;
@@ -156,7 +152,6 @@ router.put('/:eventId/:messageId/react', auth, async (req, res) => {
     const message = disc.messages.id(req.params.messageId);
     if (!message) return res.status(404).json({ msg: 'Message not found' });
 
-    // Toggle reaction
     const users = message.reactions.get(emoji) || [];
     const idx = users.indexOf(req.user.id);
     if (idx === -1) {

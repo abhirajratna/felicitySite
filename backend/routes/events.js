@@ -6,7 +6,6 @@ const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 const { sendTicketEmail, buildTicketEmailHtml } = require('../utils/email');
 
-// Helper: send discord webhook when event is published
 async function sendDiscordNotification(organizer, event) {
   if (!organizer.discordWebhook) return;
   try {
@@ -21,9 +20,6 @@ async function sendDiscordNotification(organizer, event) {
   } catch (e) { console.error('Discord webhook error:', e.message); }
 }
 
-// ─── ORGANIZER: CRUD ──────────────────────────────────────────────
-
-// POST /api/events — create event (organizer only, starts as draft)
 router.post('/', auth, authorize('organizer'), async (req, res) => {
   try {
     const data = req.body;
@@ -37,7 +33,6 @@ router.post('/', auth, authorize('organizer'), async (req, res) => {
   }
 });
 
-// PUT /api/events/:id — update event with editing rules
 router.put('/:id', auth, authorize('organizer'), async (req, res) => {
   try {
     const event = await Event.findById(req.params.id);
@@ -47,17 +42,13 @@ router.put('/:id', auth, authorize('organizer'), async (req, res) => {
     const updates = req.body;
     const oldStatus = event.status;
 
-    // Editing rules based on status
     if (oldStatus === 'draft') {
-      // Draft: free edits, can be published
       Object.assign(event, updates);
-      // If publishing, send discord notification
       if (updates.status === 'published' && oldStatus !== 'published') {
         const organizer = await User.findById(req.user.id);
         await sendDiscordNotification(organizer, event);
       }
     } else if (oldStatus === 'published') {
-      // Published: only description update, extend deadline, increase limit, close registrations, status change
       const allowed = ['description', 'registrationDeadline', 'registrationLimit', 'status'];
       for (const key of allowed) {
         if (updates[key] !== undefined) {
@@ -66,14 +57,12 @@ router.put('/:id', auth, authorize('organizer'), async (req, res) => {
         }
       }
     } else if (oldStatus === 'ongoing' || oldStatus === 'completed') {
-      // Ongoing/Completed: no edits except status change
       if (updates.status) event.status = updates.status;
     } else if (oldStatus === 'closed' || oldStatus === 'cancelled') {
-      // Closed/cancelled: no edits
       return res.status(400).json({ msg: 'Cannot edit a closed or cancelled event' });
     }
 
-    // Lock custom form fields after first registration
+    // Lock form fields after first registration
     if (event.registrations.length > 0 && updates.customFormFields) {
       delete updates.customFormFields;
     }
@@ -86,7 +75,6 @@ router.put('/:id', auth, authorize('organizer'), async (req, res) => {
   }
 });
 
-// DELETE /api/events/:id
 router.delete('/:id', auth, authorize('organizer', 'admin'), async (req, res) => {
   try {
     const event = await Event.findById(req.params.id);
@@ -101,9 +89,6 @@ router.delete('/:id', auth, authorize('organizer', 'admin'), async (req, res) =>
   }
 });
 
-// ─── PARTICIPANT: MY EVENTS (must be before /:id) ──────────────────
-
-// GET /api/events/my/registrations — all events user registered for
 router.get('/my/registrations', auth, authorize('participant'), async (req, res) => {
   try {
     const events = await Event.find({ 'registrations.participant': req.user.id })
@@ -121,7 +106,6 @@ router.get('/my/registrations', auth, authorize('participant'), async (req, res)
   }
 });
 
-// GET /api/events/my/ticket/:ticketId — get ticket details with QR
 router.get('/my/ticket/:ticketId', auth, async (req, res) => {
   try {
     const event = await Event.findOne({ 'registrations.ticketId': req.params.ticketId })
@@ -131,13 +115,11 @@ router.get('/my/ticket/:ticketId', auth, async (req, res) => {
     const reg = event.registrations.find(r => r.ticketId === req.params.ticketId);
     if (!reg) return res.status(404).json({ msg: 'Ticket not found' });
 
-    // Verify ownership or admin
     if (reg.participant.toString() !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'organizer')
       return res.status(403).json({ msg: 'Access denied' });
 
     const participant = await User.findById(reg.participant).select('firstName lastName email');
 
-    // Only generate QR for confirmed tickets (not pending/rejected)
     let qrDataUrl = null;
     if (reg.status === 'confirmed') {
       const qrData = JSON.stringify({ ticketId: reg.ticketId, eventId: event._id, participantId: reg.participant });
@@ -173,9 +155,6 @@ router.get('/my/ticket/:ticketId', auth, async (req, res) => {
   }
 });
 
-// ─── ORGANIZER: own events (must be before /:id) ──────────────────
-
-// GET /api/events/organizer/mine — events by current organizer
 router.get('/organizer/mine', auth, authorize('organizer'), async (req, res) => {
   try {
     const events = await Event.find({ organizer: req.user.id })
@@ -188,7 +167,6 @@ router.get('/organizer/mine', auth, authorize('organizer'), async (req, res) => 
   }
 });
 
-// GET /api/events/organizer/:organizerId — events by a specific organizer (public)
 router.get('/organizer/:organizerId', auth, async (req, res) => {
   try {
     const events = await Event.find({ organizer: req.params.organizerId, status: { $in: ['published', 'ongoing'] } })
@@ -201,7 +179,6 @@ router.get('/organizer/:organizerId', auth, async (req, res) => {
   }
 });
 
-// GET /api/events/analytics/mine — organizer analytics for completed events
 router.get('/analytics/mine', auth, authorize('organizer'), async (req, res) => {
   try {
     const events = await Event.find({ organizer: req.user.id, status: { $in: ['completed', 'closed'] } }).lean();
@@ -226,7 +203,6 @@ router.get('/analytics/mine', auth, authorize('organizer'), async (req, res) => 
   }
 });
 
-// GET /api/events/export/:id — export participants as CSV
 router.get('/export/:id', auth, authorize('organizer'), async (req, res) => {
   try {
     const event = await Event.findById(req.params.id)
@@ -259,9 +235,6 @@ router.get('/export/:id', auth, authorize('organizer'), async (req, res) => {
   }
 });
 
-// ─── MERCHANDISE PAYMENT APPROVAL ──────────────────────────────────
-
-// GET /api/events/pending/:id — pending orders for an event
 router.get('/pending/:id', auth, authorize('organizer'), async (req, res) => {
   try {
     const event = await Event.findById(req.params.id)
@@ -276,7 +249,6 @@ router.get('/pending/:id', auth, authorize('organizer'), async (req, res) => {
   }
 });
 
-// PUT /api/events/approve/:eventId/:ticketId — approve merchandise payment
 router.put('/approve/:eventId/:ticketId', auth, authorize('organizer'), async (req, res) => {
   try {
     const event = await Event.findById(req.params.eventId);
@@ -287,7 +259,6 @@ router.put('/approve/:eventId/:ticketId', auth, authorize('organizer'), async (r
     if (!reg) return res.status(404).json({ msg: 'Registration not found' });
     if (reg.status !== 'pending_approval') return res.status(400).json({ msg: 'Not in pending state' });
 
-    // Approve: set confirmed, decrement stock, generate QR, send email
     reg.status = 'confirmed';
     const qty = reg.quantity || 1;
     if (event.stockQuantity > 0) {
@@ -327,7 +298,6 @@ router.put('/approve/:eventId/:ticketId', auth, authorize('organizer'), async (r
   }
 });
 
-// PUT /api/events/reject/:eventId/:ticketId — reject merchandise payment
 router.put('/reject/:eventId/:ticketId', auth, authorize('organizer'), async (req, res) => {
   try {
     const event = await Event.findById(req.params.eventId);
@@ -339,10 +309,9 @@ router.put('/reject/:eventId/:ticketId', auth, authorize('organizer'), async (re
     if (reg.status !== 'pending_approval') return res.status(400).json({ msg: 'Not in pending state' });
 
     reg.status = 'rejected';
-    // Restore stock reservation if needed
     await event.save();
 
-    // Send rejection notification email
+    // Send rejection email
     const rejectedParticipant = await User.findById(reg.participant).select('firstName lastName email');
     if (rejectedParticipant) {
       const rejectHtml = `
@@ -367,9 +336,6 @@ router.put('/reject/:eventId/:ticketId', auth, authorize('organizer'), async (re
   }
 });
 
-// ─── QR SCANNER & ATTENDANCE TRACKING ──────────────────────────────
-
-// POST /api/events/scan/:id — scan QR and mark attendance
 router.post('/scan/:id', auth, authorize('organizer'), async (req, res) => {
   try {
     const { ticketId, participantId } = req.body;
@@ -382,7 +348,6 @@ router.post('/scan/:id', auth, authorize('organizer'), async (req, res) => {
     if (!reg) return res.status(404).json({ msg: 'Invalid ticket' });
     if (reg.status !== 'confirmed') return res.status(400).json({ msg: `Ticket status is ${reg.status}` });
 
-    // Check duplicate scan
     if (reg.attendanceChecked) {
       return res.status(400).json({
         msg: `Already checked in at ${new Date(reg.attendanceCheckedAt).toLocaleString()}`,
@@ -408,7 +373,6 @@ router.post('/scan/:id', auth, authorize('organizer'), async (req, res) => {
   }
 });
 
-// GET /api/events/attendance/:id — attendance dashboard data
 router.get('/attendance/:id', auth, authorize('organizer'), async (req, res) => {
   try {
     const event = await Event.findById(req.params.id)
@@ -443,7 +407,6 @@ router.get('/attendance/:id', auth, authorize('organizer'), async (req, res) => 
   }
 });
 
-// GET /api/events/attendance-export/:id — export attendance CSV
 router.get('/attendance-export/:id', auth, authorize('organizer'), async (req, res) => {
   try {
     const event = await Event.findById(req.params.id)
@@ -467,7 +430,6 @@ router.get('/attendance-export/:id', auth, authorize('organizer'), async (req, r
   }
 });
 
-// POST /api/events/manual-checkin/:id/:ticketId — manual check-in with audit
 router.post('/manual-checkin/:id/:ticketId', auth, authorize('organizer'), async (req, res) => {
   try {
     const event = await Event.findById(req.params.id);
@@ -490,28 +452,21 @@ router.post('/manual-checkin/:id/:ticketId', auth, authorize('organizer'), async
   }
 });
 
-// ─── PUBLIC / PARTICIPANT: BROWSE ──────────────────────────────────
-
-// GET /api/events — browse events with search, filters, trending
 router.get('/', auth, async (req, res) => {
   try {
     const { search, type, eligibility, dateFrom, dateTo, followedOnly, trending } = req.query;
     let query = { status: { $in: ['published', 'ongoing'] } };
 
-    // Filter by type
     if (type) query.eventType = type;
 
-    // Filter by eligibility
     if (eligibility && eligibility !== 'all') query.eligibility = { $in: [eligibility, 'all'] };
 
-    // Date range filter
     if (dateFrom || dateTo) {
       query.startDate = {};
       if (dateFrom) query.startDate.$gte = new Date(dateFrom);
       if (dateTo) query.startDate.$lte = new Date(dateTo);
     }
 
-    // Followed clubs filter
     if (followedOnly === 'true' && req.user.role === 'participant') {
       const me = await User.findById(req.user.id);
       if (me && me.followedClubs.length > 0) {
@@ -519,7 +474,6 @@ router.get('/', auth, async (req, res) => {
       }
     }
 
-    // Search: partial & fuzzy matching on title or organizer name
     let events;
     if (search) {
       const regex = new RegExp(search.split('').join('.*'), 'i'); // fuzzy
@@ -531,13 +485,11 @@ router.get('/', auth, async (req, res) => {
       ];
     }
 
-    // Trending: top 5 by recent view count in last 24h
     if (trending === 'true') {
       const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
       events = await Event.find(query)
         .populate('organizer', 'organizerName category contactEmail')
         .lean();
-      // Count recent views
       events = events.map(e => ({
         ...e,
         trendScore: (e.recentViews || []).filter(d => new Date(d) > cutoff).length,
@@ -552,7 +504,6 @@ router.get('/', auth, async (req, res) => {
       .sort({ startDate: 1 })
       .lean();
 
-    // Preference-based ordering: boost events matching user interests and followed clubs
     if (req.user.role === 'participant') {
       const me = await User.findById(req.user.id).lean();
       if (me && (me.interests?.length > 0 || me.followedClubs?.length > 0)) {
@@ -560,22 +511,18 @@ router.get('/', auth, async (req, res) => {
         const followedIds = (me.followedClubs || []).map(id => id.toString());
         events = events.map(e => {
           let score = 0;
-          // Boost for matching tags with user interests
           if (e.tags && userInterests.length > 0) {
             const matchingTags = e.tags.filter(t => userInterests.includes(t.toLowerCase()));
             score += matchingTags.length * 2;
           }
-          // Boost for followed club/organizer
           if (e.organizer && followedIds.includes(e.organizer._id.toString())) {
             score += 3;
           }
-          // Boost for matching organizer category with user interests
           if (e.organizer?.category && userInterests.includes(e.organizer.category.toLowerCase())) {
             score += 1;
           }
           return { ...e, recommendationScore: score };
         });
-        // Sort by recommendation score (desc), then by startDate (asc)
         events.sort((a, b) => {
           if (b.recommendationScore !== a.recommendationScore) return b.recommendationScore - a.recommendationScore;
           return new Date(a.startDate || 0) - new Date(b.startDate || 0);
@@ -590,7 +537,6 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-// GET /api/events/:id — event details
 router.get('/:id', auth, async (req, res) => {
   try {
     const event = await Event.findById(req.params.id)
@@ -598,10 +544,8 @@ router.get('/:id', auth, async (req, res) => {
       .populate('registrations.participant', 'firstName lastName email');
     if (!event) return res.status(404).json({ msg: 'Event not found' });
 
-    // Increment view count for trending
     event.viewCount += 1;
     event.recentViews.push(new Date());
-    // Trim old views (older than 24h)
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
     event.recentViews = event.recentViews.filter(d => d > cutoff);
     await event.save();
@@ -613,21 +557,16 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
-// ─── PARTICIPANT: REGISTRATION ──────────────────────────────────────
-
-// POST /api/events/:id/register — register for event
 router.post('/:id/register', auth, authorize('participant'), async (req, res) => {
   try {
     const event = await Event.findById(req.params.id);
     if (!event) return res.status(404).json({ msg: 'Event not found' });
     if (event.status !== 'published') return res.status(400).json({ msg: 'Event not open for registration' });
 
-    // Check deadline
     if (event.registrationDeadline && new Date() > new Date(event.registrationDeadline)) {
       return res.status(400).json({ msg: 'Registration deadline has passed' });
     }
 
-    // Check eligibility
     const participant = await User.findById(req.user.id);
     if (event.eligibility === 'iiit' && participant.participantType !== 'iiit') {
       return res.status(403).json({ msg: 'This event is for IIIT students only' });
@@ -636,7 +575,6 @@ router.post('/:id/register', auth, authorize('participant'), async (req, res) =>
       return res.status(403).json({ msg: 'This event is for non-IIIT participants only' });
     }
 
-    // Check already registered
     const alreadyRegistered = event.registrations.find(
       r => r.participant.toString() === req.user.id && (r.status === 'confirmed' || r.status === 'pending_approval')
     );
@@ -647,9 +585,7 @@ router.post('/:id/register', auth, authorize('participant'), async (req, res) =>
       return res.status(400).json({ msg });
     }
 
-    // For normal events
     if (event.eventType === 'normal') {
-      // Check registration limit
       const confirmedCount = event.registrations.filter(r => r.status === 'confirmed').length;
       if (event.registrationLimit > 0 && confirmedCount >= event.registrationLimit) {
         return res.status(400).json({ msg: 'Registration limit reached' });
@@ -686,12 +622,10 @@ router.post('/:id/register', auth, authorize('participant'), async (req, res) =>
       });
     }
 
-    // For merchandise events — uses payment approval workflow
     if (event.eventType === 'merchandise') {
       const { size, color, variant, quantity, paymentProof } = req.body;
       const qty = quantity || 1;
 
-      // Check stock — block out-of-stock purchases
       if (event.stockQuantity <= 0) {
         return res.status(400).json({ msg: 'This item is out of stock' });
       }
@@ -699,7 +633,6 @@ router.post('/:id/register', auth, authorize('participant'), async (req, res) =>
         return res.status(400).json({ msg: `Not enough stock. Only ${event.stockQuantity} left.` });
       }
 
-      // Check per-user purchase limit
       const userPurchases = event.registrations
         .filter(r => r.participant.toString() === req.user.id && (r.status === 'confirmed' || r.status === 'pending_approval'))
         .reduce((sum, r) => sum + r.quantity, 0);
@@ -723,10 +656,8 @@ router.post('/:id/register', auth, authorize('participant'), async (req, res) =>
         paymentProof,
       });
 
-      // Do NOT decrement stock yet — only on approval
       await event.save();
 
-      // No QR generated while pending — QR is generated on approval
       return res.status(201).json({
         msg: 'Order placed — pending payment approval by organizer',
         ticketId,

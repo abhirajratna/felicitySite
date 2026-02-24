@@ -14,9 +14,8 @@ export default function OrganizerEventDetail() {
   const [editDeadline, setEditDeadline] = useState('');
   const [editLimit, setEditLimit] = useState('');
   const [editing, setEditing] = useState(false);
-  const [tab, setTab] = useState('participants'); // participants | pending | attendance
+  const [tab, setTab] = useState('participants');
 
-  // Attendance/Scanner state
   const [manualTicket, setManualTicket] = useState('');
   const [scanResult, setScanResult] = useState('');
   const [checkedInList, setCheckedInList] = useState([]);
@@ -43,10 +42,8 @@ export default function OrganizerEventDetail() {
       setAttendanceStats({ total: r.data.total || 0, checkedIn: r.data.checkedIn || 0, notCheckedIn: r.data.notCheckedIn || 0 });
     }).catch(() => {});
   };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchEvent(); fetchAttendance(); }, [id]);
 
-  // Cleanup camera on unmount
   useEffect(() => {
     return () => {
       if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
@@ -101,7 +98,6 @@ export default function OrganizerEventDetail() {
     window.open(`http://localhost:5000/api/events/attendance-export/${id}?token=${localStorage.getItem('token')}`, '_blank');
   };
 
-  // Payment approval handlers
   const handleApprove = async (ticketId) => {
     try {
       const res = await API.put(`/events/approve/${id}/${ticketId}`);
@@ -119,7 +115,6 @@ export default function OrganizerEventDetail() {
     } catch (err) { setMsg(err.response?.data?.msg || 'Failed'); }
   };
 
-  // QR Scanner handlers
   const handleScanResult = async (data) => {
     try {
       const parsed = JSON.parse(data);
@@ -226,7 +221,6 @@ export default function OrganizerEventDetail() {
 
         {msg && <p style={{ color: 'green', fontSize: 13 }}>{msg}</p>}
 
-        {/* Overview */}
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 10 }}>
           <div><strong>Type:</strong> {event.eventType}</div>
           <div><strong>Status:</strong> <span style={{ color: statusColor(event.status), fontWeight: 600 }}>{event.status}</span></div>
@@ -238,7 +232,6 @@ export default function OrganizerEventDetail() {
           {event.eventType === 'normal' && event.registrationFee > 0 && <div><strong>Fee:</strong> ₹{event.registrationFee}</div>}
         </div>
 
-        {/* Status actions */}
         <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
           {event.status === 'draft' && <button onClick={() => handleStatusChange('published')} style={{ padding: '4px 12px', cursor: 'pointer', background: '#2196F3', color: '#fff', border: 'none', borderRadius: 4 }}>Publish</button>}
           {event.status === 'published' && <button onClick={() => handleStatusChange('ongoing')} style={{ padding: '4px 12px', cursor: 'pointer', background: '#FF9800', color: '#fff', border: 'none', borderRadius: 4 }}>Mark Ongoing</button>}
@@ -247,7 +240,6 @@ export default function OrganizerEventDetail() {
           {event.status === 'draft' && <button onClick={() => handleStatusChange('cancelled')} style={{ padding: '4px 12px', cursor: 'pointer', background: '#f44336', color: '#fff', border: 'none', borderRadius: 4 }}>Cancel</button>}
         </div>
 
-        {/* Inline edit for published events */}
         {(event.status === 'published' || event.status === 'draft') && (
           <div style={{ marginTop: 16, padding: 12, background: '#f9f9f9', borderRadius: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -271,7 +263,6 @@ export default function OrganizerEventDetail() {
           </div>
         )}
 
-        {/* Analytics */}
         <div style={{ marginTop: 20, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ padding: 12, background: '#e3f2fd', borderRadius: 8, minWidth: 120, textAlign: 'center' }}>
             <div style={{ fontSize: 22, fontWeight: 700 }}>{confirmed.length}</div>
@@ -307,7 +298,6 @@ export default function OrganizerEventDetail() {
           </div>
         </div>
 
-        {/* Tab navigation */}
         <div style={{ marginTop: 20, display: 'flex', gap: 0, borderBottom: '2px solid #ddd' }}>
           {['participants', ...(event.eventType === 'merchandise' ? ['pending'] : []), 'attendance'].map(t => (
             <button key={t} onClick={() => setTab(t)} style={{ padding: '8px 20px', cursor: 'pointer', background: tab === t ? '#fff' : '#f5f5f5', border: '1px solid #ddd', borderBottom: tab === t ? '2px solid #fff' : 'none', marginBottom: -2, fontWeight: tab === t ? 600 : 400, textTransform: 'capitalize' }}>
@@ -316,7 +306,6 @@ export default function OrganizerEventDetail() {
           ))}
         </div>
 
-        {/* ─── TAB: PARTICIPANTS ─────────────────────────────────── */}
         {tab === 'participants' && (
           <div style={{ marginTop: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -375,12 +364,11 @@ export default function OrganizerEventDetail() {
           </div>
         )}
 
-        {/* ─── TAB: PENDING ORDERS ──────────────────────────────── */}
+
         {tab === 'pending' && (
           <div style={{ marginTop: 16 }}>
             <h3>Payment Approval ({pendingOrders.length} Pending)</h3>
 
-            {/* Show pending orders first */}
             {pendingOrders.length === 0 && <p style={{ color: '#888' }}>No pending orders.</p>}
             {pendingOrders.map(r => {
               const p = r.participant;
@@ -401,7 +389,6 @@ export default function OrganizerEventDetail() {
                       <button onClick={() => handleReject(r.ticketId)} style={{ padding: '6px 14px', cursor: 'pointer', background: '#f44336', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12 }}>Reject</button>
                     </div>
                   </div>
-                  {/* Payment proof image */}
                   {r.paymentProof && (
                     <div style={{ marginTop: 8 }}>
                       <strong style={{ fontSize: 12 }}>Payment Proof:</strong>
@@ -414,7 +401,6 @@ export default function OrganizerEventDetail() {
               );
             })}
 
-            {/* Show rejected orders */}
             {(() => {
               const rejectedOrders = (event.registrations || []).filter(r => r.status === 'rejected');
               if (rejectedOrders.length === 0) return null;
@@ -449,7 +435,6 @@ export default function OrganizerEventDetail() {
               );
             })()}
 
-            {/* Show approved/confirmed orders */}
             {(() => {
               const approvedOrders = (event.registrations || []).filter(r => r.status === 'confirmed');
               if (approvedOrders.length === 0) return null;
@@ -478,7 +463,7 @@ export default function OrganizerEventDetail() {
           </div>
         )}
 
-        {/* ─── TAB: ATTENDANCE ──────────────────────────────────── */}
+
         {tab === 'attendance' && (
           <div style={{ marginTop: 16 }}>
             <h3>Attendance & QR Scanner</h3>
@@ -489,9 +474,7 @@ export default function OrganizerEventDetail() {
               </p>
             )}
 
-            {/* Scanner options */}
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
-              {/* Camera scanning */}
               <div style={{ flex: 1, minWidth: 200, padding: 12, border: '1px solid #ddd', borderRadius: 8 }}>
                 <h4 style={{ margin: '0 0 8px' }}>Camera Scan</h4>
                 {!scanning ? (
@@ -505,13 +488,11 @@ export default function OrganizerEventDetail() {
                 </div>
               </div>
 
-              {/* File upload */}
               <div style={{ flex: 1, minWidth: 200, padding: 12, border: '1px solid #ddd', borderRadius: 8 }}>
                 <h4 style={{ margin: '0 0 8px' }}>Upload QR Image</h4>
                 <input type="file" accept="image/*" onChange={handleFileUpload} />
               </div>
 
-              {/* Manual entry */}
               <div style={{ flex: 1, minWidth: 200, padding: 12, border: '1px solid #ddd', borderRadius: 8 }}>
                 <h4 style={{ margin: '0 0 8px' }}>Manual Ticket ID</h4>
                 <div style={{ display: 'flex', gap: 6 }}>
@@ -521,7 +502,6 @@ export default function OrganizerEventDetail() {
               </div>
             </div>
 
-            {/* Attendance stats */}
             <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
               <div style={{ padding: 10, background: '#e8f5e9', borderRadius: 6, textAlign: 'center', minWidth: 100 }}>
                 <div style={{ fontSize: 20, fontWeight: 700 }}>{attendanceStats.checkedIn}</div>
@@ -542,7 +522,6 @@ export default function OrganizerEventDetail() {
               <button onClick={handleAttendanceExport} style={{ padding: '6px 14px', cursor: 'pointer', fontSize: 12, alignSelf: 'center' }}>Export Attendance CSV</button>
             </div>
 
-            {/* Checked-in list */}
             <h4 style={{ margin: '16px 0 8px' }}>Checked In ({checkedInList.length})</h4>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
@@ -570,7 +549,6 @@ export default function OrganizerEventDetail() {
               </tbody>
             </table>
 
-            {/* Not-yet-scanned list */}
             <h4 style={{ margin: '20px 0 8px' }}>Not Yet Scanned ({notCheckedInList.length})</h4>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>

@@ -7,7 +7,7 @@ const { auth, authorize } = require('../middleware/auth');
 // All admin routes require admin role
 router.use(auth, authorize('admin'));
 
-// POST /api/admin/create-organizer — auto-generates email & password if not provided
+// POST /api/admin/create-organizer
 router.post('/create-organizer', async (req, res) => {
   try {
     const { organizerName, email, password, category, description, contactEmail } = req.body;
@@ -46,7 +46,7 @@ router.post('/create-organizer', async (req, res) => {
   }
 });
 
-// DELETE /api/admin/remove-organizer/:id — permanently delete
+// DELETE /api/admin/remove-organizer/:id
 router.delete('/remove-organizer/:id', async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
@@ -59,7 +59,7 @@ router.delete('/remove-organizer/:id', async (req, res) => {
   }
 });
 
-// PUT /api/admin/disable-organizer/:id — toggle disable/enable
+// PUT /api/admin/disable-organizer/:id
 router.put('/disable-organizer/:id', async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
@@ -84,7 +84,7 @@ router.get('/organizers', async (req, res) => {
   }
 });
 
-// PUT /api/admin/reset-password/:id  — admin resets organizer password (auto-generated)
+// PUT /api/admin/reset-password/:id
 router.put('/reset-password/:id', async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
@@ -115,11 +115,10 @@ router.get('/participants', async (req, res) => {
   }
 });
 
-// ─── PASSWORD RESET REQUEST WORKFLOW ───────────────────────────────
 
 const PasswordResetRequest = require('../models/PasswordResetRequest');
 
-// GET /api/admin/password-reset-requests — list all password reset requests
+// GET /api/admin/password-reset-requests
 router.get('/password-reset-requests', async (req, res) => {
   try {
     const requests = await PasswordResetRequest.find()
@@ -132,7 +131,7 @@ router.get('/password-reset-requests', async (req, res) => {
   }
 });
 
-// PUT /api/admin/password-reset-requests/:id/approve — approve and auto-generate password
+// PUT /api/admin/password-reset-requests/:id/approve
 router.put('/password-reset-requests/:id/approve', async (req, res) => {
   try {
     const resetReq = await PasswordResetRequest.findById(req.params.id).populate('organizer', 'organizerName email');
@@ -158,7 +157,7 @@ router.put('/password-reset-requests/:id/approve', async (req, res) => {
   }
 });
 
-// PUT /api/admin/password-reset-requests/:id/reject — reject request
+// PUT /api/admin/password-reset-requests/:id/reject
 router.put('/password-reset-requests/:id/reject', async (req, res) => {
   try {
     const resetReq = await PasswordResetRequest.findById(req.params.id);

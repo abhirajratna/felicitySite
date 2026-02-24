@@ -5,7 +5,7 @@ const User = require('../models/User');
 const { auth } = require('../middleware/auth');
 const { sendTicketEmail } = require('../utils/email');
 
-// PUT /api/user/preferences  — update interests & followed clubs
+// PUT /api/user/preferences
 router.put('/preferences', auth, async (req, res) => {
   try {
     const { interests, followedClubs } = req.body;
@@ -47,7 +47,7 @@ router.put('/skip-onboarding', auth, async (req, res) => {
   }
 });
 
-// GET /api/user/organizers-list  — list all organizers (for follow feature)
+// GET /api/user/organizers-list
 router.get('/organizers-list', auth, async (req, res) => {
   try {
     const organizers = await User.find({ role: 'organizer' }).select('organizerName category description contactEmail _id');
@@ -70,7 +70,7 @@ router.get('/profile', auth, async (req, res) => {
   }
 });
 
-// PUT /api/user/profile — edit editable fields (participant or organizer)
+// PUT /api/user/profile
 router.put('/profile', auth, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -101,13 +101,12 @@ router.put('/profile', auth, async (req, res) => {
   }
 });
 
-// PUT /api/user/change-password — participant only, auto-generates random password and emails it
+// PUT /api/user/change-password
 router.put('/change-password', auth, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ msg: 'User not found' });
 
-    // Only participants can reset their own password
     if (user.role !== 'participant') {
       return res.status(403).json({ msg: 'Organizers must request a password reset through admin' });
     }
@@ -148,7 +147,7 @@ router.put('/change-password', auth, async (req, res) => {
   }
 });
 
-// PUT /api/user/follow/:organizerId — toggle follow
+// PUT /api/user/follow/:organizerId
 router.put('/follow/:organizerId', auth, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -168,17 +167,14 @@ router.put('/follow/:organizerId', auth, async (req, res) => {
   }
 });
 
-// ─── ORGANIZER PASSWORD RESET REQUEST ──────────────────────────────
-
 const PasswordResetRequest = require('../models/PasswordResetRequest');
 
-// POST /api/user/password-reset-request — organizer submits a password reset request
+// POST /api/user/password-reset-request
 router.post('/password-reset-request', auth, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
     if (!user || user.role !== 'organizer') return res.status(403).json({ msg: 'Only organizers can request password resets' });
 
-    // Check for existing pending request
     const existing = await PasswordResetRequest.findOne({ organizer: req.user.id, status: 'pending' });
     if (existing) return res.status(400).json({ msg: 'You already have a pending request' });
 
@@ -193,7 +189,7 @@ router.post('/password-reset-request', auth, async (req, res) => {
   }
 });
 
-// GET /api/user/password-reset-requests — organizer views their own requests
+// GET /api/user/password-reset-requests
 router.get('/password-reset-requests', auth, async (req, res) => {
   try {
     const requests = await PasswordResetRequest.find({ organizer: req.user.id }).sort({ createdAt: -1 });

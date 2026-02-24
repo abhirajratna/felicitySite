@@ -8,11 +8,6 @@ export default function ParticipantDashboard() {
   const { user } = useAuth();
   const [upcoming, setUpcoming] = useState([]);
 
-  // Redirect to onboarding if not done
-  if (user && user.role === 'participant' && user.onboardingDone === false) {
-    return <Navigate to="/onboarding" replace />;
-  }
-
   useEffect(() => {
     API.get('/events/my/registrations')
       .then(res => {
@@ -25,6 +20,10 @@ export default function ParticipantDashboard() {
       })
       .catch(() => {});
   }, []);
+
+  if (user && user.role === 'participant' && user.onboardingDone === false) {
+    return <Navigate to="/onboarding" replace />;
+  }
 
   return (
     <>

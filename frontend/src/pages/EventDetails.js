@@ -15,9 +15,8 @@ export default function EventDetails() {
   const [formAnswers, setFormAnswers] = useState({});
   const [merchOpts, setMerchOpts] = useState({ size: '', color: '', variant: '', quantity: 1 });
   const [paymentProof, setPaymentProof] = useState('');
-  const [registrationResult, setRegistrationResult] = useState(null); // { ticketId, qrDataUrl, status }
+  const [registrationResult, setRegistrationResult] = useState(null);
 
-  // Discussion state
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [replyText, setReplyText] = useState({});
@@ -26,13 +25,12 @@ export default function EventDetails() {
   const [lastSeenCount, setLastSeenCount] = useState(0);
   const pollRef = useRef(null);
 
-  // Feedback state
   const [feedbacks, setFeedbacks] = useState([]);
   const [feedbackStats, setFeedbackStats] = useState(null);
   const [myRating, setMyRating] = useState(0);
   const [myComment, setMyComment] = useState('');
   const [feedbackMsg, setFeedbackMsg] = useState('');
-  const [ratingFilter, setRatingFilter] = useState(0); // 0 = all
+  const [ratingFilter, setRatingFilter] = useState(0);
 
   useEffect(() => {
     API.get(`/events/${id}`)
@@ -40,12 +38,10 @@ export default function EventDetails() {
       .catch(() => { setLoading(false); });
   }, [id]);
 
-  // Poll discussion messages
   const fetchMessages = useCallback(() => {
     API.get(`/discussions/${id}`).then(r => {
       const msgs = r.data.messages || [];
       setMessages(prev => {
-        // Show notification for new messages
         if (prev.length > 0 && msgs.length > prev.length) {
           setNewMsgCount(c => c + (msgs.length - prev.length));
         }
@@ -60,7 +56,6 @@ export default function EventDetails() {
     return () => clearInterval(pollRef.current);
   }, [fetchMessages]);
 
-  // Fetch feedback
   useEffect(() => {
     API.get(`/feedback/${id}`).then(r => {
       setFeedbacks(r.data.feedbacks || []);
@@ -115,7 +110,6 @@ export default function EventDetails() {
     }
   };
 
-  // Discussion handlers
   const handlePostMessage = async () => {
     if (!newMessage.trim()) return;
     try {
@@ -162,13 +156,11 @@ export default function EventDetails() {
     } catch (err) {}
   };
 
-  // Feedback handlers
   const handleSubmitFeedback = async () => {
     if (myRating === 0) { setFeedbackMsg('Please select a rating'); return; }
     try {
       await API.post(`/feedback/${id}`, { rating: myRating, comment: myComment });
       setFeedbackMsg('Feedback submitted!');
-      // Refresh
       const r = await API.get(`/feedback/${id}`);
       setFeedbacks(r.data.feedbacks || []);
       setFeedbackStats({ avg: r.data.avgRating, total: r.data.totalRatings, distribution: r.data.distribution });
@@ -180,7 +172,6 @@ export default function EventDetails() {
   const isOrganizer = user?.role === 'organizer' && event.organizer?._id === user?.id;
   const isRegistered = (event.registrations || []).some(r => r.participant?._id === user?.id && (r.status === 'confirmed' || r.status === 'pending_approval'));
 
-  // Check if user has pending merchandise order
   const pendingOrder = (event.registrations || []).find(
     r => r.participant?._id === user?.id && r.status === 'pending_approval'
   );
@@ -209,7 +200,6 @@ export default function EventDetails() {
           {event.tags?.length > 0 && <p><strong>Tags:</strong> {event.tags.join(', ')}</p>}
         </div>
 
-        {/* Merchandise details */}
         {event.eventType === 'merchandise' && (
           <div style={{ marginTop: 16, padding: 12, background: '#fff8e1', borderRadius: 6 }}>
             <h3>Item Details</h3>
@@ -223,14 +213,12 @@ export default function EventDetails() {
           </div>
         )}
 
-        {/* Pending order notice */}
         {pendingOrder && (
           <div style={{ marginTop: 12, padding: 12, background: '#fff3e0', border: '1px solid #FF9800', borderRadius: 6 }}>
             <strong>Order Status:</strong> Pending Approval (Ticket: {pendingOrder.ticketId?.slice(0, 8)}...)
           </div>
         )}
 
-        {/* Registration section */}
         {user?.role === 'participant' && (
           <div style={{ marginTop: 20, padding: 16, border: '1px solid #ddd', borderRadius: 6 }}>
             <h3>Register / Purchase</h3>
@@ -238,7 +226,6 @@ export default function EventDetails() {
             {regMsg && <p style={{ color: 'green' }}>{regMsg}</p>}
             {regError && <p style={{ color: 'red' }}>{regError}</p>}
 
-            {/* Registration Success with QR Code */}
             {registrationResult && (
               <div style={{ padding: 16, border: '2px solid #4CAF50', borderRadius: 8, marginBottom: 16, background: '#f0fff0', textAlign: 'center' }}>
                 <h3 style={{ color: '#4CAF50', margin: '0 0 12px' }}>
@@ -275,7 +262,6 @@ export default function EventDetails() {
             {outOfStock && <p style={{ color: 'red' }}>Out of stock.</p>}
             {alreadyRegistered && <p style={{ color: '#2196F3' }}>You are already registered for this event.</p>}
 
-            {/* Normal event: custom form */}
             {canRegister && event.eventType === 'normal' && event.customFormFields?.length > 0 && (
               <div style={{ marginBottom: 12 }}>
                 {event.customFormFields.map(f => (
@@ -298,7 +284,6 @@ export default function EventDetails() {
               </div>
             )}
 
-            {/* Merchandise options */}
             {canRegister && event.eventType === 'merchandise' && (
               <div style={{ marginBottom: 12 }}>
                 {event.sizes?.length > 0 && (
@@ -332,7 +317,6 @@ export default function EventDetails() {
                   <label>Quantity</label><br />
                   <input type="number" min="1" max={event.purchaseLimitPerUser || 99} value={merchOpts.quantity} onChange={e => setMerchOpts({ ...merchOpts, quantity: parseInt(e.target.value) || 1 })} style={{ padding: 6, width: 80 }} />
                 </div>
-                {/* Payment proof upload */}
                 <div style={{ marginBottom: 8 }}>
                   <label><strong>Payment Proof (required)</strong></label><br />
                   <input type="file" accept="image/*" onChange={handleFileChange} style={{ marginTop: 4 }} />
@@ -349,7 +333,6 @@ export default function EventDetails() {
           </div>
         )}
 
-        {/* ─── DISCUSSION FORUM ───────────────────────────────────── */}
         <div style={{ marginTop: 30, padding: 16, border: '1px solid #ddd', borderRadius: 6 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ margin: 0 }}>Discussion Forum</h3>
@@ -363,7 +346,6 @@ export default function EventDetails() {
             )}
           </div>
 
-          {/* Post new message */}
           {(isRegistered || isOrganizer) && (
             <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
               <input value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="Write a message..." style={{ flex: 1, padding: 8 }} onKeyDown={e => e.key === 'Enter' && handlePostMessage()} />
@@ -385,7 +367,6 @@ export default function EventDetails() {
               </div>
               <p style={{ margin: '6px 0', fontSize: 14 }}>{m.text}</p>
 
-              {/* Reactions */}
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
                 {['👍', '❤️', '😂'].map(emoji => {
                   const reactionUsers = m.reactions?.get ? m.reactions.get(emoji) : (m.reactions?.[emoji] || []);
@@ -401,7 +382,6 @@ export default function EventDetails() {
                   Replies ({m.replies?.length || 0})
                 </button>
 
-                {/* Organizer moderation */}
                 {isOrganizer && (
                   <>
                     <button onClick={() => handlePin(m._id)} style={{ cursor: 'pointer', background: 'none', border: 'none', color: '#FF9800', fontSize: 12 }}>
@@ -414,7 +394,6 @@ export default function EventDetails() {
                 )}
               </div>
 
-              {/* Replies */}
               {showReplies[m._id] && (
                 <div style={{ marginTop: 8, marginLeft: 16, borderLeft: '2px solid #ddd', paddingLeft: 10 }}>
                   {(m.replies || []).map((r, i) => (
@@ -436,11 +415,9 @@ export default function EventDetails() {
           ))}
         </div>
 
-        {/* ─── ANONYMOUS FEEDBACK ─────────────────────────────────── */}
         <div style={{ marginTop: 24, padding: 16, border: '1px solid #ddd', borderRadius: 6 }}>
           <h3>Feedback</h3>
 
-          {/* Aggregate stats */}
           {feedbackStats && feedbackStats.total > 0 && (
             <div style={{ marginBottom: 12, padding: 10, background: '#f5f5f5', borderRadius: 6 }}>
               <strong>Average Rating:</strong> {'★'.repeat(Math.round(feedbackStats.avg))}{'☆'.repeat(5 - Math.round(feedbackStats.avg))} ({feedbackStats.avg?.toFixed(1)}/5)
@@ -453,7 +430,6 @@ export default function EventDetails() {
             </div>
           )}
 
-          {/* Submit feedback (participant only, event completed/closed) */}
           {user?.role === 'participant' && isRegistered && ['completed', 'closed'].includes(event.status) && (
             <div style={{ marginBottom: 12 }}>
               <p style={{ fontSize: 13 }}>Rate this event (anonymous):</p>
@@ -468,7 +444,6 @@ export default function EventDetails() {
             </div>
           )}
 
-          {/* Anonymous feedback list */}
           {feedbacks.length > 0 && (
             <div>
               <div style={{ marginBottom: 8, display: 'flex', gap: 8, alignItems: 'center' }}>

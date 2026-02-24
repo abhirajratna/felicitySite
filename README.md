@@ -2,12 +2,75 @@
 
 **Roll Number:** 2024114011
 
-## Tech Stack
-- **Frontend:** React (Create React App), react-router-dom v6, axios
-- **Backend:** Express.js, MongoDB (Mongoose), JWT auth, bcryptjs, nodemailer, qrcode, uuid
-- **QR Scanning:** jsqr (browser-side decoding from camera/file upload)
+A web app for managing campus club events — handles everything from event creation and registration to merchandise sales, attendance tracking, and feedback collection. Built as part of DASS Assignment 1.
 
-## Setup & Run
+Deployed at: https://felicity-site.vercel.app (frontend), https://felicitysite.onrender.com (backend API)
+
+## Libraries and Frameworks
+
+**Frontend:**
+- **React** (via Create React App) — picked this since it's what I'm most comfortable with for building SPAs. CRA handles the webpack/babel config so I didn't have to set that up manually.
+- **react-router-dom v6** — for client-side routing. v6 has a simpler API than v5 and the nested routes work well for the dashboard layouts.
+- **axios** — HTTP client for API calls. Chose it over fetch because the interceptor pattern makes it easy to attach the JWT token to every request automatically (see `api.js`).
+- **jsqr** — browser-side QR code decoder. I use this for the attendance scanner feature — it works with both camera streams and uploaded images without needing a native app or server-side processing.
+
+**Backend:**
+- **Express.js** — lightweight and flexible, good enough for a REST API of this size. Didn't need anything heavier.
+- **Mongoose** (MongoDB ODM) — schemas give some structure to MongoDB documents, and the populate/virtuals are useful for joining user data with events and registrations.
+- **jsonwebtoken** — JWT-based auth. Tokens are generated on login and verified via middleware on protected routes. Went with JWTs over sessions since the frontend is a separate SPA.
+- **bcryptjs** — password hashing. Using the JS implementation so there's no native dependency issues during deployment.
+- **qrcode** — generates QR code images (as data URLs) for event tickets. The QR encodes the ticket ID + event ID + participant ID as JSON.
+- **uuid** — generates unique ticket IDs for registrations.
+- **nodemailer** — sends confirmation emails with QR code attachments when someone registers or gets their merchandise order approved.
+- **node-fetch** — used to send Discord webhook notifications when organizers publish events (if they've configured a webhook URL in their profile).
+- **crypto** (built-in) — generates random passwords for organizer accounts and password resets.
+
+## Advanced Features
+
+### Merchandise Payment Approval Workflow (Tier A)
+
+For merchandise events, I needed a way for organizers to verify payments before confirming orders. The flow works like this: participants upload a payment proof image (stored as base64 in the registration subdocument), and the order goes into `pending_approval` status. Stock isn't decremented and no QR code is generated at this stage — that only happens on approval. Organizers see a "Pending Orders" tab on their event detail page where they can view the proof images and approve or reject each order. On approval, the system decrements stock, generates a QR ticket, and sends a confirmation email. On rejection, a notification email is sent explaining the rejection.
+
+I stored registrations as subdocuments within the Event schema rather than a separate collection — this keeps everything atomic and avoids needing transactions for stock updates. The tradeoff is that events with lots of registrations get large, but for a campus setting the numbers are manageable.
+
+Key files: `backend/routes/events.js` (approve/reject endpoints), `frontend/src/pages/OrganizerEventDetail.js` (pending orders tab), `frontend/src/pages/EventDetails.js` (purchase flow with proof upload).
+
+### QR Scanner & Attendance Tracking (Tier A)
+
+The attendance system supports three check-in methods:
+1. **Live camera scan** — uses `getUserMedia` to access the device camera, draws video frames to a canvas, and runs jsqr on each frame in a `requestAnimationFrame` loop. This was the trickiest part — I had to handle camera permissions, cleanup on unmount, and parse the QR data (JSON with ticketId, eventId, participantId).
+2. **Image upload** — same jsqr decoding but from a file input instead of a video stream.
+3. **Manual ticket ID entry** — fallback for when QR scanning isn't practical.
+
+The backend validates the ticket against the event, checks for duplicate scans, and marks attendance with a timestamp. Manual check-ins include an audit note with the organizer's ID and time. I also added CSV export for attendance data and a stats dashboard showing check-in rates.
+
+Key files: `backend/routes/events.js` (scan, attendance, manual-checkin endpoints), `frontend/src/pages/OrganizerEventDetail.js` (attendance tab with scanner UI).
+
+### Organizer Password Reset Workflow (Tier B)
+
+Since organizer accounts are created by the admin (not self-registered), organizers can't just reset their own passwords freely. Instead, they submit a request with an optional reason, and the admin approves or rejects it from a dedicated page. On approval, the system auto-generates a random password (using `crypto.randomBytes`), hashes it, updates the account, and displays the new credentials to the admin for sharing. I added a constraint so only one pending request per organizer is allowed at a time.
+
+Key files: `backend/routes/user.js` (submit request), `backend/routes/admin.js` (approve/reject), `backend/models/PasswordResetRequest.js`, `frontend/src/pages/AdminPasswordRequests.js`.
+
+### Discussion Forum (Tier B)
+
+Each event has a discussion thread where registered participants and the organizer can post messages. I went with polling (every 5 seconds) instead of WebSockets since it's simpler to deploy and the near-real-time delay is acceptable for this use case. New message notifications show up as a badge that users can dismiss.
+
+Features: threaded replies, emoji reactions (stored as a Map in the Discussion schema), message pinning (organizer-only, pinned messages sort to top), announcements, and organizer moderation (delete any message). The Discussion model uses subdocuments for messages and nested subdocuments for replies.
+
+Key files: `backend/routes/discussion.js`, `backend/models/Discussion.js`, `frontend/src/pages/EventDetails.js`.
+
+### Anonymous Feedback System (Tier C)
+
+Participants can leave anonymous feedback (1–5 stars + optional comment) on completed or closed events. Feedback is stored with a participant reference (for upsert behavior — one review per person per event) but the GET endpoint strips participant info before returning results. The frontend shows aggregate stats (average rating, distribution) and lets users filter reviews by star rating.
+
+Key files: `backend/routes/feedback.js`, `backend/models/Feedback.js`, `frontend/src/pages/EventDetails.js`.
+
+## Setup
+
+### Prerequisites
+- Node.js v16+
+- MongoDB (local or Atlas)
 
 ### Backend
 ```bash
@@ -15,7 +78,9 @@ cd backend
 npm install
 node server.js
 ```
-Backend runs on `http://localhost:5000`. Requires MongoDB on `localhost:27017`.
+Runs on `http://localhost:5000`. Set env vars in `.env`: `MONGO_URI`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `EMAIL_USER`, `EMAIL_PASS`.
+
+Admin account is auto-seeded on first start (default: `admin@iiit.ac.in` / `admin123`).
 
 ### Frontend
 ```bash
@@ -23,125 +88,4 @@ cd frontend
 npm install
 npm start
 ```
-Frontend runs on `http://localhost:3000`.
-
-### Default Admin
-- Email: `admin@iiit.ac.in`
-- Password: `admin123`
-
----
-
-## Part 2 - Advanced Features (Section 13)
-
-### Tier A Features (8 marks each)
-
-#### 1. Merchandise Payment Approval Workflow
-- **Location:** Backend: `routes/events.js` (approve/reject routes), Frontend: `EventDetails.js`, `OrganizerEventDetail.js`
-- **How it works:**
-  - When a participant purchases merchandise, they must upload a payment proof image (converted to base64)
-  - The order enters `pending_approval` status — no QR code is generated and stock is not decremented yet
-  - Organizers see a **Pending Orders** tab on their event detail page with payment proof images
-  - Organizers can **Approve** (generates QR, decrements stock, sends confirmation email) or **Reject** orders
-  - Participants see their pending order status on the event page
-
-#### 2. QR Scanner & Attendance Tracking
-- **Location:** Backend: `routes/events.js` (scan/attendance routes), Frontend: `OrganizerEventDetail.js` (Attendance tab)
-- **How it works:**
-  - Organizers have an **Attendance** tab with three check-in methods:
-    1. **Camera Scan** — uses device camera via getUserMedia + jsqr for live QR scanning
-    2. **File Upload** — upload a QR code image, decoded client-side with jsqr
-    3. **Manual Entry** — paste a ticket ID directly
-  - Backend validates the ticket, rejects duplicate scans, and records attendance with timestamp
-  - Live attendance stats (checked-in count, percentage) displayed on the page
-  - **Attendance CSV export** available for download
-  - Manual check-ins include audit notes with organizer ID and timestamp
-
-### Tier B Features (6 marks each)
-
-#### 3. Organizer Password Reset Workflow
-- **Location:** Backend: `routes/user.js`, `routes/admin.js`, Models: `PasswordResetRequest.js`, Frontend: `OrganizerProfile.js`, `AdminPasswordRequests.js`
-- **How it works:**
-  - Organizers can submit a password reset request with a reason from their profile page
-  - Only one pending request allowed at a time
-  - Admin sees all requests on the **Password Reset Requests** page with filter tabs (pending/approved/rejected/all)
-  - Admin can **Approve** (auto-generates a new random password, hashes and saves it) or **Reject** with optional comments
-  - Generated credentials are displayed to admin for secure sharing
-  - Organizers can view their request history with status updates
-
-#### 4. Real-Time Discussion Forum
-- **Location:** Backend: `routes/discussion.js`, Model: `Discussion.js`, Frontend: `EventDetails.js`
-- **How it works:**
-  - Every event has a discussion section visible to registered participants and the organizer
-  - Messages are polled every 5 seconds for near real-time updates
-  - Features: **Threaded replies**, **Emoji reactions** (👍 ❤️ 😂), **Pinned messages**, **Announcements**
-  - **Organizer moderation:** Can pin/unpin messages, delete any message, post announcements
-  - Pinned messages appear at the top of the discussion
-  - Participants can post, reply, and react to messages
-
-### Tier C Feature (2 marks)
-
-#### 5. Anonymous Feedback System
-- **Location:** Backend: `routes/feedback.js`, Model: `Feedback.js`, Frontend: `EventDetails.js`
-- **How it works:**
-  - Registered participants can submit anonymous feedback (1-5 star rating + optional comment) for completed/closed events
-  - Feedback is stored with participant reference but displayed **anonymously** (no names shown)
-  - Aggregate stats: average rating, total reviews, rating distribution (1-5 star breakdown)
-  - Upsert behavior: participants can update their feedback
-  - Unique index on event+participant prevents duplicate entries
-
-
-## Prerequisites
-- Node.js v16+ and npm
-- MongoDB (local or MongoDB Atlas)
-
-## Backend Setup
-
-cd backend
-npm install
-npm run dev       # starts with nodemon on port 5000
-
-Admin account is auto-seeded on first start using credentials from .env:
-  Email:    admin@iiit.ac.in
-  Password: admin123
-
-## Frontend Setup
-
-cd frontend
-npm install
-npm start         # starts React dev server on port 3000
-
-## Production Deployment
-
-### Frontend (Vercel/Netlify)
-1. Push code to GitHub
-2. Connect frontend/ to Vercel or Netlify
-3. Set build command: npm run build
-4. Set output directory: build
-5. Set environment variable (if needed): REACT_APP_API_URL=<backend_url>
-
-### Backend (Render/Railway)
-1. Connect backend/ to Render or Railway
-2. Set build command: npm install
-3. Set start command: node server.js
-4. Set environment variables: MONGO_URI, JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD
-5. Update frontend api.js baseURL to deployed backend URL
-
-### Database (MongoDB Atlas)
-1. Create free cluster on mongodb.com
-2. Create database user and whitelist IPs
-3. Use connection string in MONGO_URI env variable
-
-## Usage Flow
-
-1. Open the frontend URL
-2. Admin: login with admin@iiit.ac.in / admin1  23
-   - Dashboard → Manage Clubs/Organizers → Add clubs, disable/remove, reset passwords
-   - System auto-generates login email & password for new organizers
-3. Organizer: login with credentials created by admin
-   - Dashboard → Create Event → Form Builder → Save Draft → Publish
-   - View analytics, manage participants, export CSV
-   - Profile → Set Discord Webhook for auto-posting new events
-4. Participant: register via /register, then set preferences (or skip)
-   - IIIT students must use @iiit.ac.in / @students.iiit.ac.in / @research.iiit.ac.in email
-   - Non-IIIT participants can use any email
-   - Browse events, register, view tickets with QR codes
+Runs on `http://localhost:3001`. API base URL is configured in `src/api.js`.
