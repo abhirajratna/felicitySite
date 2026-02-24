@@ -31,7 +31,7 @@ function AppRoutes() {
     <Routes>
       {/* Public routes */}
       <Route path="/login" element={user ? <Navigate to={user.role === 'admin' ? '/admin' : user.role === 'organizer' ? '/organizer' : '/dashboard'} /> : <Login />} />
-      <Route path="/register" element={user ? <Navigate to="/dashboard" /> : <Register />} />
+      <Route path="/register" element={user ? <Navigate to={user.onboardingDone === false ? '/onboarding' : '/dashboard'} /> : <Register />} />
 
       {/* Participant routes */}
       <Route path="/onboarding" element={<ProtectedRoute roles={['participant']}><Onboarding /></ProtectedRoute>} />

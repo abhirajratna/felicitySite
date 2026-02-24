@@ -341,6 +341,8 @@ export default function OrganizerEventDetail() {
                   <th style={{ padding: 6 }}>Name</th>
                   <th style={{ padding: 6 }}>Email</th>
                   <th style={{ padding: 6 }}>Reg Date</th>
+                  <th style={{ padding: 6 }}>Payment</th>
+                  <th style={{ padding: 6 }}>Attendance</th>
                   <th style={{ padding: 6 }}>Status</th>
                   <th style={{ padding: 6 }}>Ticket ID</th>
                   {event.eventType === 'merchandise' && <th style={{ padding: 6 }}>Size/Color/Qty</th>}
@@ -349,11 +351,16 @@ export default function OrganizerEventDetail() {
               <tbody>
                 {filteredRegs.map(r => {
                   const p = r.participant;
+                  const paymentInfo = event.eventType === 'merchandise'
+                    ? (r.paymentProof ? 'Proof uploaded' : 'None')
+                    : (event.registrationFee > 0 ? `₹${event.registrationFee}` : 'Free');
                   return (
                     <tr key={r.ticketId} style={{ borderBottom: '1px solid #eee' }}>
                       <td style={{ padding: 6 }}>{p ? `${p.firstName || ''} ${p.lastName || ''}` : 'N/A'}</td>
                       <td style={{ padding: 6 }}>{p?.email || ''}</td>
                       <td style={{ padding: 6 }}>{r.registeredAt ? new Date(r.registeredAt).toLocaleDateString() : ''}</td>
+                      <td style={{ padding: 6, fontSize: 12 }}>{paymentInfo}</td>
+                      <td style={{ padding: 6, fontSize: 12, color: r.attendanceChecked ? 'green' : '#888' }}>{r.attendanceChecked ? '✓ Checked In' : '—'}</td>
                       <td style={{ padding: 6, color: r.status === 'confirmed' ? 'green' : r.status === 'pending_approval' ? '#FF9800' : r.status === 'rejected' ? 'red' : '#888' }}>{r.status}</td>
                       <td style={{ padding: 6, fontSize: 11 }}>{r.ticketId?.slice(0, 8)}...</td>
                       {event.eventType === 'merchandise' && <td style={{ padding: 6 }}>{r.size || '-'}/{r.color || '-'}/{r.quantity || 1}</td>}
@@ -361,7 +368,7 @@ export default function OrganizerEventDetail() {
                   );
                 })}
                 {filteredRegs.length === 0 && (
-                  <tr><td colSpan={event.eventType === 'merchandise' ? 6 : 5} style={{ padding: 12, textAlign: 'center', color: '#888' }}>No participants found</td></tr>
+                  <tr><td colSpan={event.eventType === 'merchandise' ? 8 : 7} style={{ padding: 12, textAlign: 'center', color: '#888' }}>No participants found</td></tr>
                 )}
               </tbody>
             </table>

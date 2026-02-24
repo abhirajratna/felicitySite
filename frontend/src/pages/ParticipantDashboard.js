@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import API from '../api';
 import Navbar from '../components/Navbar';
 
 export default function ParticipantDashboard() {
   const { user } = useAuth();
   const [upcoming, setUpcoming] = useState([]);
+
+  // Redirect to onboarding if not done
+  if (user && user.role === 'participant' && user.onboardingDone === false) {
+    return <Navigate to="/onboarding" replace />;
+  }
 
   useEffect(() => {
     API.get('/events/my/registrations')

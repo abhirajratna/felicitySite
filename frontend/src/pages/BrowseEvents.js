@@ -89,6 +89,9 @@ export default function BrowseEvents() {
                     {e.trendScore !== undefined && (
                       <span style={{ marginLeft: 6, fontSize: 11, color: '#e91e63' }}>🔥 {e.trendScore} views</span>
                     )}
+                    {e.recommendationScore > 0 && (
+                      <span style={{ marginLeft: 6, fontSize: 11, background: '#4CAF50', color: '#fff', padding: '1px 6px', borderRadius: 4 }}>⭐ Recommended</span>
+                    )}
                   </div>
                   <span style={{ fontSize: 12, color: '#888' }}>
                     {e.startDate ? new Date(e.startDate).toLocaleDateString() : 'TBA'}

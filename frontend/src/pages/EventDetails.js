@@ -22,6 +22,8 @@ export default function EventDetails() {
   const [newMessage, setNewMessage] = useState('');
   const [replyText, setReplyText] = useState({});
   const [showReplies, setShowReplies] = useState({});
+  const [newMsgCount, setNewMsgCount] = useState(0);
+  const [lastSeenCount, setLastSeenCount] = useState(0);
   const pollRef = useRef(null);
 
   // Feedback state
@@ -30,6 +32,7 @@ export default function EventDetails() {
   const [myRating, setMyRating] = useState(0);
   const [myComment, setMyComment] = useState('');
   const [feedbackMsg, setFeedbackMsg] = useState('');
+  const [ratingFilter, setRatingFilter] = useState(0); // 0 = all
 
   useEffect(() => {
     API.get(`/events/${id}`)
@@ -39,7 +42,16 @@ export default function EventDetails() {
 
   // Poll discussion messages
   const fetchMessages = useCallback(() => {
-    API.get(`/discussions/${id}`).then(r => setMessages(r.data.messages || [])).catch(() => {});
+    API.get(`/discussions/${id}`).then(r => {
+      const msgs = r.data.messages || [];
+      setMessages(prev => {
+        // Show notification for new messages
+        if (prev.length > 0 && msgs.length > prev.length) {
+          setNewMsgCount(c => c + (msgs.length - prev.length));
+        }
+        return msgs;
+      });
+    }).catch(() => {});
   }, [id]);
 
   useEffect(() => {
@@ -339,7 +351,17 @@ export default function EventDetails() {
 
         {/* ─── DISCUSSION FORUM ───────────────────────────────────── */}
         <div style={{ marginTop: 30, padding: 16, border: '1px solid #ddd', borderRadius: 6 }}>
-          <h3>Discussion Forum</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ margin: 0 }}>Discussion Forum</h3>
+            {newMsgCount > 0 && (
+              <span
+                onClick={() => { setNewMsgCount(0); setLastSeenCount(messages.length); }}
+                style={{ cursor: 'pointer', background: '#f44336', color: '#fff', padding: '4px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600 }}
+              >
+                {newMsgCount} new message{newMsgCount > 1 ? 's' : ''} — Click to dismiss
+              </span>
+            )}
+          </div>
 
           {/* Post new message */}
           {(isRegistered || isOrganizer) && (
@@ -449,12 +471,29 @@ export default function EventDetails() {
           {/* Anonymous feedback list */}
           {feedbacks.length > 0 && (
             <div>
-              {feedbacks.slice(0, 10).map((f, i) => (
+              <div style={{ marginBottom: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                <label style={{ fontSize: 13 }}>Filter by rating:</label>
+                <select value={ratingFilter} onChange={e => setRatingFilter(Number(e.target.value))} style={{ padding: 4, fontSize: 13 }}>
+                  <option value={0}>All Ratings</option>
+                  <option value={5}>5 Stars</option>
+                  <option value={4}>4 Stars</option>
+                  <option value={3}>3 Stars</option>
+                  <option value={2}>2 Stars</option>
+                  <option value={1}>1 Star</option>
+                </select>
+              </div>
+              {feedbacks
+                .filter(f => ratingFilter === 0 || f.rating === ratingFilter)
+                .slice(0, 20)
+                .map((f, i) => (
                 <div key={i} style={{ marginBottom: 8, padding: 8, background: '#fafafa', borderRadius: 4, fontSize: 13 }}>
                   <span style={{ color: '#FFC107' }}>{'★'.repeat(f.rating)}{'☆'.repeat(5 - f.rating)}</span>
                   {f.comment && <p style={{ margin: '4px 0 0' }}>{f.comment}</p>}
                 </div>
               ))}
+              {feedbacks.filter(f => ratingFilter === 0 || f.rating === ratingFilter).length === 0 && (
+                <p style={{ fontSize: 13, color: '#888' }}>No feedback matching this filter.</p>
+              )}
             </div>
           )}
           {feedbacks.length === 0 && <p style={{ fontSize: 13, color: '#888' }}>No feedback yet.</p>}

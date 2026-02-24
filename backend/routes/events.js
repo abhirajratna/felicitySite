@@ -552,6 +552,37 @@ router.get('/', auth, async (req, res) => {
       .sort({ startDate: 1 })
       .lean();
 
+    // Preference-based ordering: boost events matching user interests and followed clubs
+    if (req.user.role === 'participant') {
+      const me = await User.findById(req.user.id).lean();
+      if (me && (me.interests?.length > 0 || me.followedClubs?.length > 0)) {
+        const userInterests = (me.interests || []).map(i => i.toLowerCase());
+        const followedIds = (me.followedClubs || []).map(id => id.toString());
+        events = events.map(e => {
+          let score = 0;
+          // Boost for matching tags with user interests
+          if (e.tags && userInterests.length > 0) {
+            const matchingTags = e.tags.filter(t => userInterests.includes(t.toLowerCase()));
+            score += matchingTags.length * 2;
+          }
+          // Boost for followed club/organizer
+          if (e.organizer && followedIds.includes(e.organizer._id.toString())) {
+            score += 3;
+          }
+          // Boost for matching organizer category with user interests
+          if (e.organizer?.category && userInterests.includes(e.organizer.category.toLowerCase())) {
+            score += 1;
+          }
+          return { ...e, recommendationScore: score };
+        });
+        // Sort by recommendation score (desc), then by startDate (asc)
+        events.sort((a, b) => {
+          if (b.recommendationScore !== a.recommendationScore) return b.recommendationScore - a.recommendationScore;
+          return new Date(a.startDate || 0) - new Date(b.startDate || 0);
+        });
+      }
+    }
+
     res.json({ events });
   } catch (err) {
     console.error(err);

@@ -85,6 +85,7 @@ export default function MyEventsDashboard() {
                 <th style={{ padding: 6 }}>Event</th>
                 <th style={{ padding: 6 }}>Type</th>
                 <th style={{ padding: 6 }}>Organizer</th>
+                <th style={{ padding: 6 }}>Schedule</th>
                 <th style={{ padding: 6 }}>Status</th>
                 <th style={{ padding: 6 }}>Ticket</th>
               </tr>
@@ -94,6 +95,8 @@ export default function MyEventsDashboard() {
                 const reg = e.myRegistrations?.[0];
                 const statusColor = reg?.status === 'confirmed' ? 'green' : reg?.status === 'pending_approval' ? '#FF9800' : reg?.status === 'rejected' ? 'red' : '#888';
                 const statusLabel = reg?.status === 'pending_approval' ? 'Pending Approval' : reg?.status || e.status;
+                const startStr = e.startDate ? new Date(e.startDate).toLocaleDateString() : 'TBA';
+                const endStr = e.endDate ? new Date(e.endDate).toLocaleDateString() : 'TBA';
                 return (
                   <tr key={e._id} style={{ borderBottom: '1px solid #eee' }}>
                     <td style={{ padding: 6 }}>
@@ -101,6 +104,7 @@ export default function MyEventsDashboard() {
                     </td>
                     <td style={{ padding: 6 }}>{e.eventType}</td>
                     <td style={{ padding: 6 }}>{e.organizer?.organizerName || '-'}</td>
+                    <td style={{ padding: 6, fontSize: 12 }}>{startStr} – {endStr}</td>
                     <td style={{ padding: 6, color: statusColor }}>{statusLabel}</td>
                     <td style={{ padding: 6 }}>
                       {reg?.ticketId ? (

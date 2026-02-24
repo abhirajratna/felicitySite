@@ -88,3 +88,60 @@ Frontend runs on `http://localhost:3000`.
   - Aggregate stats: average rating, total reviews, rating distribution (1-5 star breakdown)
   - Upsert behavior: participants can update their feedback
   - Unique index on event+participant prevents duplicate entries
+
+
+## Prerequisites
+- Node.js v16+ and npm
+- MongoDB (local or MongoDB Atlas)
+
+## Backend Setup
+
+cd backend
+npm install
+npm run dev       # starts with nodemon on port 5000
+
+Admin account is auto-seeded on first start using credentials from .env:
+  Email:    admin@iiit.ac.in
+  Password: admin123
+
+## Frontend Setup
+
+cd frontend
+npm install
+npm start         # starts React dev server on port 3000
+
+## Production Deployment
+
+### Frontend (Vercel/Netlify)
+1. Push code to GitHub
+2. Connect frontend/ to Vercel or Netlify
+3. Set build command: npm run build
+4. Set output directory: build
+5. Set environment variable (if needed): REACT_APP_API_URL=<backend_url>
+
+### Backend (Render/Railway)
+1. Connect backend/ to Render or Railway
+2. Set build command: npm install
+3. Set start command: node server.js
+4. Set environment variables: MONGO_URI, JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD
+5. Update frontend api.js baseURL to deployed backend URL
+
+### Database (MongoDB Atlas)
+1. Create free cluster on mongodb.com
+2. Create database user and whitelist IPs
+3. Use connection string in MONGO_URI env variable
+
+## Usage Flow
+
+1. Open the frontend URL
+2. Admin: login with admin@iiit.ac.in / admin1  23
+   - Dashboard → Manage Clubs/Organizers → Add clubs, disable/remove, reset passwords
+   - System auto-generates login email & password for new organizers
+3. Organizer: login with credentials created by admin
+   - Dashboard → Create Event → Form Builder → Save Draft → Publish
+   - View analytics, manage participants, export CSV
+   - Profile → Set Discord Webhook for auto-posting new events
+4. Participant: register via /register, then set preferences (or skip)
+   - IIIT students must use @iiit.ac.in / @students.iiit.ac.in / @research.iiit.ac.in email
+   - Non-IIIT participants can use any email
+   - Browse events, register, view tickets with QR codes
