@@ -27,22 +27,22 @@ export default function OrganizerEventDetail() {
   const streamRef = useRef(null);
   const animRef = useRef(null);
 
-  const fetchEvent = () => {
+  const fetchEvent = React.useCallback(() => {
     API.get(`/events/${id}`).then(r => {
       setEvent(r.data.event);
       setEditDesc(r.data.event.description);
       setEditDeadline(r.data.event.registrationDeadline ? r.data.event.registrationDeadline.slice(0, 16) : '');
       setEditLimit(r.data.event.registrationLimit || 0);
     }).catch(() => {});
-  };
-  const fetchAttendance = () => {
+  }, [id]);
+  const fetchAttendance = React.useCallback(() => {
     API.get(`/events/attendance/${id}`).then(r => {
       setCheckedInList(r.data.checkedInList || []);
       setNotCheckedInList(r.data.notCheckedInList || []);
       setAttendanceStats({ total: r.data.total || 0, checkedIn: r.data.checkedIn || 0, notCheckedIn: r.data.notCheckedIn || 0 });
     }).catch(() => {});
-  };
-  useEffect(() => { fetchEvent(); fetchAttendance(); }, [id]);
+  }, [id]);
+  useEffect(() => { fetchEvent(); fetchAttendance(); }, [id, fetchEvent, fetchAttendance]);
 
   useEffect(() => {
     return () => {

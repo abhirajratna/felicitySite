@@ -22,7 +22,7 @@ export default function EventDetails() {
   const [replyText, setReplyText] = useState({});
   const [showReplies, setShowReplies] = useState({});
   const [newMsgCount, setNewMsgCount] = useState(0);
-  const [lastSeenCount, setLastSeenCount] = useState(0);
+  const [, setLastSeenCount] = useState(0);
   const pollRef = useRef(null);
 
   const [feedbacks, setFeedbacks] = useState([]);
